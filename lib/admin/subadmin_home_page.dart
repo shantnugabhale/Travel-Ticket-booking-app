@@ -1,0 +1,118 @@
+import 'package:flutter/material.dart';
+import 'package:trevel_booking_app/admin/create_subadmin_page.dart';
+import 'package:trevel_booking_app/admin/manage_posts_page.dart';
+import 'package:trevel_booking_app/admin/upload_destination_page.dart';
+import 'admin_login.dart'; // Make sure to import your admin login page
+
+class SubadminHomePage extends StatelessWidget {
+  const SubadminHomePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 1,
+        // The back arrow is usually handled automatically by Navigator
+        // leading: IconButton(icon: Icon(Icons.arrow_back, color: Colors.black), onPressed: () => Navigator.of(context).pop()),
+        title: const Text(
+          'Sub-Admin Dashboard',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+        actions: [
+          // Logout Button
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.black),
+            onPressed: () {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const AdminLoginPage()),
+                (route) => false,
+              );
+            },
+          ),
+        ],
+      ),
+      backgroundColor: Colors.grey[100], // A light background color
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            DashboardCard(
+              icon: Icons.upload_file,
+              title: 'Upload Post',
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => UploadDestinationPage()));
+              },
+            ),
+            DashboardCard(
+              icon: Icons.edit_calendar,
+              title: 'Manage Post',
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => ManagePostsPage()));
+              },
+            ),
+            DashboardCard(
+              icon: Icons.local_activity,
+              title: 'View Tickets',
+              onTap: () {
+                // TODO: Navigate to the View Tickets page
+                debugPrint('View Tickets tapped');
+              },
+            ),
+            
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A reusable card widget for the dashboard items
+class DashboardCard extends StatelessWidget {
+  const DashboardCard({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2.0,
+      margin: const EdgeInsets.only(bottom: 16.0),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12.0),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12.0),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 30.0,
+                color: Theme.of(context).primaryColor,
+              ),
+              const SizedBox(width: 20.0),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18.0,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

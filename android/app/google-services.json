@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "126154070685",
+    "project_id": "ravel-booking-app",
+    "storage_bucket": "ravel-booking-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:126154070685:android:e51fa0037f6cad071f5274",
+        "android_client_info": {
+          "package_name": "com.example.trevel_booking_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAI4lADqqOhRYUvrfAKpQL-AImixocCxmQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
