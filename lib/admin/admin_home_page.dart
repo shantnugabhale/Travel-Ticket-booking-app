@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:trevel_booking_app/admin/create_subadmin_page.dart';
+import 'package:trevel_booking_app/admin/manage_admins_page.dart';
 import 'package:trevel_booking_app/admin/manage_posts_page.dart';
 import 'package:trevel_booking_app/admin/upload_destination_page.dart';
 import 'admin_login.dart'; // Make sure to import your admin login page
@@ -71,8 +72,7 @@ class AdminHomePage extends StatelessWidget {
               icon: Icons.manage_accounts,
               title: 'Manage Admins',
               onTap: () {
-                // TODO: Navigate to the Manage Admins page
-                debugPrint('Manage Admins tapped');
+                 Navigator.push(context, MaterialPageRoute(builder: (context)=>ManageAdminsPage()));
               },
             ),
           ],

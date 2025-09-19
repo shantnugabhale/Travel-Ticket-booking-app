@@ -19,6 +19,7 @@ void main() async {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       home:AdminLoginPage(),
     );
   }
