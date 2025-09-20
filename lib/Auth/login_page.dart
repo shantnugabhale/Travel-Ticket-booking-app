@@ -1,9 +1,8 @@
-// lib/login_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:trevel_booking_app/user/home_page.dart';
- // NEW: Import the home page
+// Navigate to home page on success
+import 'signup_page.dart'; // NEW: Import the signup page for navigation
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -13,20 +12,18 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
 
+  // Text editing controllers
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+
+  // Firebase instance
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
   Future<void> _login() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            backgroundColor: Colors.red,
-            content: Text("Please enter both email and password.")),
-      );
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
@@ -38,22 +35,15 @@ class _LoginPageState extends State<LoginPage> {
         password: _passwordController.text.trim(),
       );
 
-      // NEW: Check if the widget is still mounted before showing SnackBar and navigating
+      // MODIFIED: Consistent navigation that clears the stack
       if (mounted) {
-        // NEW: Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              backgroundColor: Colors.green,
-              content: Text("Login Successful!")),
-        );
-
-        // NEW: Navigate to HomePage and replace the login page in the stack
-        Navigator.of(context).pushReplacement(
+        Navigator.pushAndRemoveUntil(
+          context,
           MaterialPageRoute(builder: (context) => const HomePage()),
+          (route) => false,
         );
       }
     } on FirebaseAuthException catch (e) {
-      // Error handling remains the same
       String message;
       switch (e.code) {
         case 'user-not-found':
@@ -69,14 +59,20 @@ class _LoginPageState extends State<LoginPage> {
           message = 'An error occurred. Please try again.';
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text(message)),
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('An unexpected error occurred: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
-      if (mounted) {
+      if (mounted)
         setState(() {
           _isLoading = false;
         });
-      }
     }
   }
 
@@ -89,70 +85,93 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    // The UI (build method) remains exactly the same as before.
-    // No changes are needed here.
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Login"),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text("Login")),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Icon(Icons.lock_person, size: 80, color: Colors.blueAccent),
-              const SizedBox(height: 30),
-              const Text(
-                "Welcome Back!",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                "Sign in to continue",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.grey[700]),
-              ),
-              const SizedBox(height: 40),
-              TextField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: "Email",
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email_outlined),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // MODIFIED: UI updated for consistency
+                const Icon(Icons.login, size: 80, color: Colors.blueAccent),
+                const SizedBox(height: 20),
+                const Text(
+                  "Welcome Back!",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: "Password",
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock_outline),
+                const SizedBox(height: 10),
+                Text(
+                  "Sign in to continue your adventure",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.grey[700]),
                 ),
-              ),
-              const SizedBox(height: 30),
-              _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : ElevatedButton(
-                      onPressed: _login,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 40),
+
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: "Email",
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
+                  validator: (value) => (value!.isEmpty || !value.contains('@'))
+                      ? 'Please enter a valid email'
+                      : null,
+                ),
+                const SizedBox(height: 20),
+
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: "Password",
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock_outline),
+                  ),
+                  validator: (value) =>
+                      (value!.isEmpty) ? 'Please enter your password' : null,
+                ),
+                const SizedBox(height: 30),
+
+                _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : ElevatedButton(
+                        onPressed: _login,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: const Text(
+                          "Login",
+                          style: TextStyle(fontSize: 18),
                         ),
                       ),
-                      child: const Text(
-                        "Login",
-                        style: TextStyle(fontSize: 18),
-                      ),
+                const SizedBox(height: 20),
+
+                // NEW: Navigation link to the SignUpPage
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text("Don't have an account?"),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (context) => const SignUpPage(),
+                          ),
+                        );
+                      },
+                      child: const Text("Sign Up"),
                     ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
