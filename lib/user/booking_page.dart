@@ -18,7 +18,7 @@ class TravelerInfo {
         phoneController = TextEditingController(),
         aadhaarController = TextEditingController(),
         passportController = TextEditingController();
-  
+
   void dispose() {
     firstNameController.dispose();
     middleNameController.dispose();
@@ -56,13 +56,15 @@ class BookingPage extends StatefulWidget {
 class _BookingPageState extends State<BookingPage> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
-  
+
   String? _selectedPickupLocation;
   DateTime? _startDate;
   DateTime? _endDate;
   int _numberOfTravelers = 1;
-  
+
   List<TravelerInfo> _travelerInfoList = [TravelerInfo()];
+  // **NEW: Future to fetch destination data for currency**
+  late Future<DocumentSnapshot> _destinationFuture;
 
   @override
   void initState() {
@@ -74,6 +76,11 @@ class _BookingPageState extends State<BookingPage> {
         _updateTravelerForms(widget.initialTravelers!);
       });
     }
+    // Fetch destination data when the page loads
+    _destinationFuture = FirebaseFirestore.instance
+        .collection('destinations')
+        .doc(widget.destinationId)
+        .get();
   }
 
   void _updateTravelerForms(int count) {
@@ -85,37 +92,21 @@ class _BookingPageState extends State<BookingPage> {
       _travelerInfoList = List.generate(count, (_) => TravelerInfo());
     });
   }
-  
+
   @override
   void dispose() {
-    _updateTravelerForms(0);
-    super.dispose();
-  }
-
-  Future<void> _selectDate(BuildContext context, {required bool isStartDate}) async {
-    final now = DateTime.now();
-    final pickedDate = await showDatePicker(
-      context: context,
-      initialDate: (isStartDate ? _startDate : _endDate) ?? now,
-      firstDate: now,
-      lastDate: DateTime(now.year + 5),
-    );
-
-    if (pickedDate != null) {
-      setState(() {
-        if (isStartDate) {
-          _startDate = pickedDate;
-        } else {
-          _endDate = pickedDate;
-        }
-      });
+    for (var info in _travelerInfoList) {
+      info.dispose();
     }
+    super.dispose();
   }
 
   Future<void> _bookTickets() async {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all required fields for each traveler.'), backgroundColor: Colors.red),
+        const SnackBar(
+            content: Text('Please fill all required fields for each traveler.'),
+            backgroundColor: Colors.red),
       );
       return;
     }
@@ -126,14 +117,16 @@ class _BookingPageState extends State<BookingPage> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('User not logged in.');
 
-      final travelersData = _travelerInfoList.map((info) => {
-        'firstName': info.firstNameController.text.trim(),
-        'middleName': info.middleNameController.text.trim(),
-        'surname': info.surnameController.text.trim(),
-        'phone': info.phoneController.text.trim(),
-        'aadhaar': info.aadhaarController.text.trim(),
-        'passportId': info.passportController.text.trim(),
-      }).toList();
+      final travelersData = _travelerInfoList
+          .map((info) => {
+                'firstName': info.firstNameController.text.trim(),
+                'middleName': info.middleNameController.text.trim(),
+                'surname': info.surnameController.text.trim(),
+                'phone': info.phoneController.text.trim(),
+                'aadhaar': info.aadhaarController.text.trim(),
+                'passportId': info.passportController.text.trim(),
+              })
+          .toList();
 
       await FirebaseFirestore.instance.collection('bookings').add({
         'userId': user.uid,
@@ -151,23 +144,40 @@ class _BookingPageState extends State<BookingPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Booking successful!'), backgroundColor: Colors.green),
+          const SnackBar(
+              content: Text('Booking successful!'),
+              backgroundColor: Colors.green),
         );
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Booking failed: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Booking failed: $e'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() { _isLoading = false; });
     }
   }
 
+  // **NEW: Helper to get the correct currency symbol**
+  String getCurrencySymbol(String currencyCode) {
+    switch (currencyCode) {
+      case 'INR':
+        return '₹';
+      case 'USD':
+        return '\$';
+      case 'EUR':
+        return '€';
+      case 'GBP':
+        return '£';
+      default:
+        return currencyCode;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final double totalCost = widget.basePricePerPerson * _numberOfTravelers;
-    
     return Scaffold(
       appBar: AppBar(title: Text('Book Trip to ${widget.destinationName}')),
       body: SingleChildScrollView(
@@ -177,29 +187,41 @@ class _BookingPageState extends State<BookingPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Trip Details', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text('Trip Details',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: _selectedPickupLocation,
-                decoration: const InputDecoration(labelText: 'Select Nearest Pickup Location', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                    labelText: 'Select Nearest Pickup Location',
+                    border: OutlineInputBorder()),
                 items: ['Mumbai Airport', 'Pune Airport', 'Delhi Airport']
-                    .map((loc) => DropdownMenuItem(value: loc, child: Text(loc)))
+                    .map((loc) =>
+                        DropdownMenuItem(value: loc, child: Text(loc)))
                     .toList(),
-                onChanged: (value) => setState(() => _selectedPickupLocation = value),
+                onChanged: (value) =>
+                    setState(() => _selectedPickupLocation = value),
                 validator: (v) => v == null ? 'Required' : null,
               ),
               const SizedBox(height: 16),
-              Row(children: [Expanded(child: _buildDatePickerField(isStartDate: true)), const SizedBox(width: 16), Expanded(child: _buildDatePickerField(isStartDate: false))]),
+              Row(children: [
+                Expanded(child: _buildDatePickerField(isStartDate: true)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildDatePickerField(isStartDate: false))
+              ]),
               const Divider(height: 40),
-
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Travelers Information', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const Text('Travelers Information',
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   DropdownButton<int>(
                     value: _numberOfTravelers,
                     items: List.generate(10, (i) => i + 1)
-                        .map((num) => DropdownMenuItem(value: num, child: Text('$num Person${num > 1 ? 's' : ''}')))
+                        .map((num) => DropdownMenuItem(
+                            value: num,
+                            child: Text('$num Person${num > 1 ? 's' : ''}')))
                         .toList(),
                     onChanged: (value) {
                       if (value != null) _updateTravelerForms(value);
@@ -220,14 +242,7 @@ class _BookingPageState extends State<BookingPage> {
                 },
               ),
               const Divider(height: 40),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Total Cost:', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                  Text('\$${totalCost.toStringAsFixed(2)}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                ],
-              ),
+              _buildCostSection(),
               const SizedBox(height: 24),
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -235,8 +250,10 @@ class _BookingPageState extends State<BookingPage> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _bookTickets,
-                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                        child: const Text('Book Tickets', style: TextStyle(fontSize: 18)),
+                        style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16)),
+                        child: const Text('Confirm Booking',
+                            style: TextStyle(fontSize: 18)),
                       ),
                     ),
             ],
@@ -245,8 +262,7 @@ class _BookingPageState extends State<BookingPage> {
       ),
     );
   }
-  
-  // --- FIX: Restored the code for this helper widget ---
+
   Widget _buildDatePickerField({required bool isStartDate}) {
     DateTime? date = isStartDate ? _startDate : _endDate;
     String label = isStartDate ? 'Start Date' : 'End Date';
@@ -256,27 +272,54 @@ class _BookingPageState extends State<BookingPage> {
       children: [
         Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
-        InkWell(
-          onTap: () => _selectDate(context, isStartDate: isStartDate),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  date == null ? 'Select' : DateFormat('dd MMM, yyyy').format(date),
-                  style: TextStyle(fontSize: 16, color: date == null ? Colors.grey[700] : Colors.black),
-                ),
-                const Icon(Icons.calendar_today_outlined, color: Colors.grey),
-              ],
-            ),
+        // **MODIFIED: Dates are now read-only**
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade400),
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.grey.shade100, // Background color for read-only look
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                date == null
+                    ? 'Not set'
+                    : DateFormat('dd MMM, yyyy').format(date),
+                style: TextStyle(
+                    fontSize: 16,
+                    color: date == null ? Colors.grey[700] : Colors.black),
+              ),
+              const Icon(Icons.calendar_today_outlined, color: Colors.grey),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCostSection() {
+    return FutureBuilder<DocumentSnapshot>(
+      future: _destinationFuture,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+        
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+        final currency = data['currency'] ?? 'USD';
+        final totalCost = widget.basePricePerPerson * _numberOfTravelers;
+        
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Total Cost:',
+                style: TextStyle(fontSize: 18, color: Colors.grey)),
+            Text('${getCurrencySymbol(currency)}${totalCost.toStringAsFixed(2)}',
+                style:
+                    const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          ],
+        );
+      },
     );
   }
 }
@@ -298,23 +341,56 @@ class TravelerForm extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              personNumber == 1 ? 'Traveler 1 (Primary Contact)' : 'Traveler $personNumber Details',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+              personNumber == 1
+                  ? 'Traveler 1 (Primary Contact)'
+                  : 'Traveler $personNumber Details',
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blueAccent),
             ),
             const Divider(height: 20),
             Row(children: [
-              Expanded(child: TextFormField(controller: info.firstNameController, decoration: const InputDecoration(labelText: 'First Name'), validator: (v) => v!.isEmpty ? 'Required' : null)),
+              Expanded(
+                  child: TextFormField(
+                      controller: info.firstNameController,
+                      decoration: const InputDecoration(labelText: 'First Name'),
+                      // **MODIFIED: Added validator**
+                      validator: (v) => v!.isEmpty ? 'Required' : null)),
               const SizedBox(width: 8),
-              Expanded(child: TextFormField(controller: info.surnameController, decoration: const InputDecoration(labelText: 'Surname'), validator: (v) => v!.isEmpty ? 'Required' : null)),
+              Expanded(
+                  child: TextFormField(
+                      controller: info.surnameController,
+                      decoration: const InputDecoration(labelText: 'Surname'),
+                      // **MODIFIED: Added validator**
+                      validator: (v) => v!.isEmpty ? 'Required' : null)),
             ]),
             const SizedBox(height: 12),
-            TextFormField(controller: info.middleNameController, decoration: const InputDecoration(labelText: 'Middle Name (Optional)')),
+            TextFormField(
+                controller: info.middleNameController,
+                decoration: const InputDecoration(labelText: 'Middle Name'),
+                 // **MODIFIED: Added validator**
+                validator: (v) => v!.isEmpty ? 'Required' : null),
             const SizedBox(height: 12),
-            TextFormField(controller: info.phoneController, decoration: const InputDecoration(labelText: 'Phone Number'), keyboardType: TextInputType.phone, validator: (v) => v!.isEmpty ? 'Required' : null),
+            TextFormField(
+                controller: info.phoneController,
+                decoration: const InputDecoration(labelText: 'Phone Number'),
+                keyboardType: TextInputType.phone,
+                // **MODIFIED: Added validator**
+                validator: (v) => v!.isEmpty ? 'Required' : null),
             const SizedBox(height: 12),
-            TextFormField(controller: info.aadhaarController, decoration: const InputDecoration(labelText: 'Aadhaar Number (Optional)'), keyboardType: TextInputType.number),
+            TextFormField(
+                controller: info.aadhaarController,
+                decoration: const InputDecoration(labelText: 'Aadhaar Number'),
+                keyboardType: TextInputType.number,
+                // **MODIFIED: Added validator**
+                validator: (v) => v!.isEmpty ? 'Required' : null),
             const SizedBox(height: 12),
-            TextFormField(controller: info.passportController, decoration: const InputDecoration(labelText: 'Passport ID'), validator: (v) => v!.isEmpty ? 'Required' : null),
+            TextFormField(
+                controller: info.passportController,
+                decoration: const InputDecoration(labelText: 'Passport ID'),
+                // **MODIFIED: Added validator**
+                validator: (v) => v!.isEmpty ? 'Required' : null),
           ],
         ),
       ),

@@ -4,10 +4,9 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:trevel_booking_app/user/Tips_page.dart';
 import 'package:trevel_booking_app/user/community_page.dart';
 import 'package:trevel_booking_app/user/reviews_page.dart';
-import 'destination_detail_page.dart'; // Make sure you have this file for navigation
-import 'planner_page.dart';  // Make sure you have this file for navigation
+import 'destination_detail_page.dart';
+import 'planner_page.dart';
 
-// This is the main stateful widget that will manage our navigation
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -18,9 +17,8 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
 
-  // A list of the pages to navigate between
   static const List<Widget> _pages = <Widget>[
-    HomePageContent(), // The original homepage content
+    HomePageContent(),
     PlannerPage(),
     TipsPage(),
     CommunityPage(),
@@ -40,10 +38,13 @@ class _HomePageState extends State<HomePage> {
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Planner'),
-          BottomNavigationBarItem(icon: Icon(Icons.lightbulb_outline), label: 'Tips'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_today), label: 'Planner'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.lightbulb_outline), label: 'Tips'),
           BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Community'),
-          BottomNavigationBarItem(icon: Icon(Icons.star_border), label: 'Reviews'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.star_border), label: 'Reviews'),
         ],
         currentIndex: _selectedIndex,
         selectedItemColor: Theme.of(context).primaryColor,
@@ -57,7 +58,6 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// The original HomePage UI is now in this widget
 class HomePageContent extends StatefulWidget {
   const HomePageContent({super.key});
 
@@ -77,14 +77,28 @@ class _HomePageContentState extends State<HomePageContent> {
 
   @override
   Widget build(BuildContext context) {
+    // Determine the query based on the selected category
+    Query destinationsQuery;
+    if (_selectedCategory == 'All') {
+      destinationsQuery = FirebaseFirestore.instance.collection('destinations');
+    } else {
+      destinationsQuery = FirebaseFirestore.instance
+          .collection('destinations')
+          .where('category', isEqualTo: _selectedCategory);
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Travel Explorer'),
         centerTitle: false,
         actions: [
-          IconButton(icon: const Icon(Icons.notifications_none, size: 28), onPressed: () {}),
+          IconButton(
+              icon: const Icon(Icons.notifications_none, size: 28),
+              onPressed: () {}),
           const SizedBox(width: 8),
-          const CircleAvatar(backgroundImage: NetworkImage('https://via.placeholder.com/150'), radius: 18),
+          const CircleAvatar(
+              backgroundImage: NetworkImage('https://via.placeholder.com/150'),
+              radius: 18),
           const SizedBox(width: 16),
         ],
         backgroundColor: Colors.white,
@@ -103,13 +117,20 @@ class _HomePageContentState extends State<HomePageContent> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Welcome Back!', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                    Text('Welcome Back!',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.location_on, color: Colors.grey, size: 18),
+                        const Icon(Icons.location_on,
+                            color: Colors.grey, size: 18),
                         const SizedBox(width: 4),
-                        Text(_userLocation, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                        Text(_userLocation,
+                            style: const TextStyle(
+                                color: Colors.grey, fontSize: 16)),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -117,10 +138,13 @@ class _HomePageContentState extends State<HomePageContent> {
                       decoration: InputDecoration(
                         hintText: 'Search destinations...',
                         prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none),
                         filled: true,
                         fillColor: Colors.grey[200],
-                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 0),
                       ),
                     ),
                   ],
@@ -130,17 +154,26 @@ class _HomePageContentState extends State<HomePageContent> {
               _buildCategoryFilter(),
               const SizedBox(height: 32),
               
+              // Featured Destinations Section
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text('Featured Destinations', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                child: Text('Featured Destinations',
+                    style:
+                        TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(height: 16),
               SizedBox(
                 height: 250,
                 child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('destinations').limit(5).snapshots(),
+                  stream: FirebaseFirestore.instance
+                      .collection('destinations')
+                      .where('isFeatured', isEqualTo: true)
+                      .snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                     if (snapshot.data!.docs.isEmpty) {
+                      return const Center(child: Text('No featured items yet.'));
+                    }
                     return AnimationLimiter(
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
@@ -148,7 +181,8 @@ class _HomePageContentState extends State<HomePageContent> {
                         itemCount: snapshot.data!.docs.length,
                         itemBuilder: (context, index) {
                           final destination = snapshot.data!.docs[index];
-                          final data = destination.data() as Map<String, dynamic>;
+                          final data =
+                              destination.data() as Map<String, dynamic>;
                           return AnimationConfiguration.staggeredList(
                             position: index,
                             duration: const Duration(milliseconds: 375),
@@ -157,8 +191,10 @@ class _HomePageContentState extends State<HomePageContent> {
                               child: FadeInAnimation(
                                 child: DestinationCard(
                                   imageUrl: data['imageUrl'] ?? '', name: data['name'] ?? '', location: data['location'] ?? '',
-                                  rating: data['safetyRating']?.toDouble() ?? 0.0, price: data['budget']?['averageDaily']?.toInt() ?? 0,
-                                  currency: data['budget']?['currency'] ?? '\$', isFeatured: true,
+                                  rating: data['safetyRating']?.toDouble() ?? 0.0, 
+                                  price: data['budget']?.toInt() ?? 0,
+                                  currency: data['currency'] ?? '\$', 
+                                  isFeatured: true,
                                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DestinationDetailPage(destinationId: destination.id))),
                                 ),
                               ),
@@ -172,18 +208,18 @@ class _HomePageContentState extends State<HomePageContent> {
               ),
               const SizedBox(height: 32),
               
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text('Popular Destinations', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+              // Popular Destinations Section
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text('Popular Destinations',
+                    style:
+                        TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(height: 16),
-
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: StreamBuilder<QuerySnapshot>(
-                  stream: _selectedCategory == 'All'
-                      ? FirebaseFirestore.instance.collection('destinations').snapshots()
-                      : FirebaseFirestore.instance.collection('destinations').where('popularActivities', arrayContains: _selectedCategory).snapshots(),
+                  stream: destinationsQuery.snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                     if (snapshot.data!.docs.isEmpty) return const Center(heightFactor: 5, child: Text('No destinations found for this category.'));
@@ -207,8 +243,9 @@ class _HomePageContentState extends State<HomePageContent> {
                               child: FadeInAnimation(
                                 child: DestinationCard(
                                   imageUrl: data['imageUrl'] ?? '', name: data['name'] ?? '', location: data['location'] ?? '',
-                                  rating: data['safetyRating']?.toDouble() ?? 0.0, price: data['budget']?['averageDaily']?.toInt() ?? 0,
-                                  currency: data['budget']?['currency'] ?? '\$',
+                                  rating: data['safetyRating']?.toDouble() ?? 0.0, 
+                                  price: data['budget']?.toInt() ?? 0,
+                                  currency: data['currency'] ?? '\$',
                                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DestinationDetailPage(destinationId: destination.id))),
                                 ),
                               ),
@@ -259,7 +296,7 @@ class _HomePageContentState extends State<HomePageContent> {
   }
 }
 
-// ALL HELPER WIDGETS BELOW //
+// ALL HELPER WIDGETS BELOW (No changes needed here, but included for completeness)
 
 class CategoryChip extends StatelessWidget {
   final String label;
@@ -354,6 +391,21 @@ class DestinationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    String getCurrencySymbol(String currencyCode) {
+      switch (currencyCode) {
+        case 'INR':
+          return '₹';
+        case 'USD':
+          return '\$';
+        case 'EUR':
+          return '€';
+        case 'GBP':
+          return '£';
+        default:
+          return currencyCode;
+      }
+    }
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -416,7 +468,7 @@ class DestinationCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            '$currency$price',
+                            '${getCurrencySymbol(currency)}$price',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,

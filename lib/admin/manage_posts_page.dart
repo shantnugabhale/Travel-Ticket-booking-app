@@ -1,26 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'edit_destination_page.dart'; // We will create this file next
+import 'edit_destination_page.dart';
 
 class ManagePostsPage extends StatelessWidget {
   const ManagePostsPage({super.key});
 
+  // **MODIFIED: This function is now more robust and handles errors correctly.**
   Future<void> _deletePost(BuildContext context, DocumentSnapshot post) async {
     try {
-      // 1. Delete the image from Firebase Storage
-      final imageUrl = post['imageUrl'] as String;
-      await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+      // Safely access the post data.
+      final postData = post.data() as Map<String, dynamic>?;
 
-      // 2. Delete the document from Firestore
+      // 1. Check if an imageUrl exists and is a valid Firebase Storage URL.
+      if (postData != null && postData.containsKey('imageUrl')) {
+        final imageUrl = postData['imageUrl'] as String;
+        if (imageUrl.startsWith('https://firebasestorage.googleapis.com')) {
+          try {
+            // Attempt to delete the image from Firebase Storage.
+            await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+          } catch (e) {
+            // If image deletion fails, print an error but continue to delete the post.
+            debugPrint("Could not delete image from Storage: $e");
+          }
+        }
+      }
+
+      // 2. Delete the document from Firestore. This will run even if image deletion fails.
       await FirebaseFirestore.instance.collection('destinations').doc(post.id).delete();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Post deleted successfully!'), backgroundColor: Colors.green),
+        const SnackBar(
+            content: Text('Post deleted successfully!'),
+            backgroundColor: Colors.green),
       );
     } catch (e) {
+      // Catch any other errors during the process.
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete post: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Failed to delete post: $e'),
+            backgroundColor: Colors.red),
       );
     }
   }
@@ -55,7 +74,10 @@ class ManagePostsPage extends StatelessWidget {
         title: const Text('Manage Posts'),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('destinations').orderBy('createdAt', descending: true).snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('destinations')
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -76,13 +98,14 @@ class ManagePostsPage extends StatelessWidget {
               final postData = post.data() as Map<String, dynamic>;
 
               return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                margin:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundImage: NetworkImage(postData['imageUrl']),
+                    backgroundImage: NetworkImage(postData['imageUrl'] ?? ''),
                   ),
-                  title: Text(postData['name']),
-                  subtitle: Text(postData['location']),
+                  title: Text(postData['name'] ?? 'No Name'),
+                  subtitle: Text(postData['location'] ?? 'No Location'),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -91,7 +114,8 @@ class ManagePostsPage extends StatelessWidget {
                         onPressed: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (context) => EditDestinationPage(post: post),
+                              builder: (context) =>
+                                  EditDestinationPage(post: post),
                             ),
                           );
                         },

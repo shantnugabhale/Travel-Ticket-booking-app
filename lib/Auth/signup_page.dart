@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:trevel_booking_app/user/home_page.dart';
  // Navigate to home page on success
-import 'login_page.dart'; // Link to the login page
+import 'login_page.dart' hide HomePage; // Link to the login page
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});

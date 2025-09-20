@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:trevel_booking_app/user/plan_trip_page.dart'; // Ensure this import path is correct for your project
+import 'package:trevel_booking_app/user/plan_trip_page.dart';
 
 class DestinationDetailPage extends StatefulWidget {
   final String destinationId;
@@ -13,20 +13,38 @@ class DestinationDetailPage extends StatefulWidget {
 
 class _DestinationDetailPageState extends State<DestinationDetailPage> {
   bool _isFavorited = false;
-  // NEW: Store the future in a state variable to avoid re-fetching on rebuilds
   late Future<DocumentSnapshot> _destinationFuture;
 
   @override
   void initState() {
     super.initState();
-    _destinationFuture = FirebaseFirestore.instance.collection('destinations').doc(widget.destinationId).get();
+    _destinationFuture = FirebaseFirestore.instance
+        .collection('destinations')
+        .doc(widget.destinationId)
+        .get();
+  }
+
+  // Helper to get the correct currency symbol
+  String getCurrencySymbol(String currencyCode) {
+    switch (currencyCode) {
+      case 'INR':
+        return '₹';
+      case 'USD':
+        return '\$';
+      case 'EUR':
+        return '€';
+      case 'GBP':
+        return '£';
+      default:
+        return currencyCode;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: FutureBuilder<DocumentSnapshot>(
-        future: _destinationFuture, // Use the state variable
+        future: _destinationFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -37,15 +55,20 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
 
           final data = snapshot.data!.data() as Map<String, dynamic>;
 
+          // Provide default values for all fields to prevent errors
           final String name = data['name'] ?? 'Unknown Destination';
           final String location = data['location'] ?? 'Unknown Location';
-          final String description = data['description'] ?? 'No description available.';
+          final String description =
+              data['description'] ?? 'No description available.';
           final String imageUrl = data['imageUrl'] ?? '';
           final double safetyRating = data['safetyRating']?.toDouble() ?? 0.0;
-          final int avgBudget = data['budget']?['averageDaily']?.toInt() ?? 0;
-          final String currency = data['budget']?['currency'] ?? 'USD';
-          final List<String> activities = List<String>.from(data['popularActivities'] ?? []);
-          final List<String> highlights = List<String>.from(data['mustSeeHighlights'] ?? []);
+          // **FIXED: Correctly reading budget and currency from the new structure**
+          final int avgBudget = data['budget']?.toInt() ?? 0;
+          final String currency = data['currency'] ?? 'USD';
+          final List<String> activities =
+              List<String>.from(data['popularActivities'] ?? []);
+          final List<String> highlights =
+              List<String>.from(data['mustSeeHighlights'] ?? []);
 
           return CustomScrollView(
             slivers: [
@@ -71,7 +94,8 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
                       Image.network(
                         imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey),
+                        errorBuilder: (context, error, stackTrace) =>
+                            Container(color: Colors.grey),
                       ),
                       const DecoratedBox(
                         decoration: BoxDecoration(
@@ -88,7 +112,11 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
                 ),
                 actions: [
                   IconButton(
-                    icon: Icon(_isFavorited ? Icons.favorite : Icons.favorite_border, color: _isFavorited ? Colors.red : Colors.white),
+                    icon: Icon(
+                        _isFavorited
+                            ? Icons.favorite
+                            : Icons.favorite_border,
+                        color: _isFavorited ? Colors.red : Colors.white),
                     onPressed: () => setState(() => _isFavorited = !_isFavorited),
                   ),
                 ],
@@ -102,17 +130,26 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.location_on, color: Colors.grey, size: 18),
+                            const Icon(Icons.location_on,
+                                color: Colors.grey, size: 18),
                             const SizedBox(width: 4),
-                            Text(location, style: const TextStyle(fontSize: 16, color: Colors.grey)),
+                            Text(location,
+                                style: const TextStyle(
+                                    fontSize: 16, color: Colors.grey)),
                             const Spacer(),
-                            const Icon(Icons.star, color: Colors.amber, size: 18),
+                            const Icon(Icons.star,
+                                color: Colors.amber, size: 18),
                             const SizedBox(width: 4),
-                            const Text("4.8 (1250 reviews)", style: TextStyle(fontSize: 16)), // Placeholder
+                            const Text("4.8 (1250 reviews)",
+                                style: TextStyle(fontSize: 16)),
                           ],
                         ),
                         const SizedBox(height: 16),
-                        Text(description, style: TextStyle(fontSize: 16, color: Colors.grey[700], height: 1.5)),
+                        Text(description,
+                            style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey[700],
+                                height: 1.5)),
                         const SizedBox(height: 24),
                         _buildInfoCard(
                           icon: Icons.monetization_on,
@@ -121,8 +158,9 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Average daily budget: \$$avgBudget', style: const TextStyle(fontSize: 16)),
-                              Text('Currency: $currency', style: const TextStyle(fontSize: 16, color: Colors.grey)),
+                              Text(
+                                  'Budget: ${getCurrencySymbol(currency)}$avgBudget',
+                                  style: const TextStyle(fontSize: 16)),
                             ],
                           ),
                         ),
@@ -133,7 +171,10 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
                           title: 'Safety Rating',
                           child: Row(
                             children: [
-                              Text('$safetyRating / 10', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              Text('$safetyRating / 10',
+                                  style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold)),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: ClipRRect(
@@ -142,7 +183,9 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
                                     value: safetyRating / 10,
                                     minHeight: 10,
                                     backgroundColor: Colors.green.shade100,
-                                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.green),
+                                    valueColor:
+                                        const AlwaysStoppedAnimation<Color>(
+                                            Colors.green),
                                   ),
                                 ),
                               ),
@@ -156,13 +199,16 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
                           child: ListView.builder(
                             scrollDirection: Axis.horizontal,
                             itemCount: activities.length,
-                            itemBuilder: (ctx, i) => _buildActivityChip(activities[i]),
+                            itemBuilder: (ctx, i) =>
+                                _buildActivityChip(activities[i]),
                           ),
                         ),
                         const SizedBox(height: 24),
                         _buildSectionHeader('Must-See Highlights'),
-                        ...highlights.map((item) => _buildHighlightItem(item)).toList(),
-                        const SizedBox(height: 80), // Padding for the bottom bar
+                        ...highlights
+                            .map((item) => _buildHighlightItem(item))
+                            .toList(),
+                        const SizedBox(height: 80),
                       ],
                     ),
                   )
@@ -172,12 +218,11 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
           );
         },
       ),
-      // FIX: Wrap the bottom bar in a FutureBuilder to give it access to the data
       bottomNavigationBar: FutureBuilder<DocumentSnapshot>(
-        future: _destinationFuture, // Use the same future as the body
+        future: _destinationFuture,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return const SizedBox.shrink(); // Show nothing while data is loading
+            return const SizedBox.shrink();
           }
           final data = snapshot.data!.data() as Map<String, dynamic>;
           return _buildBottomActionBar(context, data: data);
@@ -186,15 +231,19 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
     );
   }
 
-  // Helper Widgets to keep the build method clean
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
-      child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+      child:
+          Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
     );
   }
 
-  Widget _buildInfoCard({required IconData icon, required Color iconColor, required String title, required Widget child}) {
+  Widget _buildInfoCard(
+      {required IconData icon,
+      required Color iconColor,
+      required String title,
+      required Widget child}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -208,7 +257,11 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
             children: [
               Icon(icon, color: iconColor),
               const SizedBox(width: 8),
-              Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: iconColor)),
+              Text(title,
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: iconColor)),
             ],
           ),
           const SizedBox(height: 12),
@@ -224,7 +277,8 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
       child: Chip(
         label: Text(label),
         backgroundColor: Colors.blue.shade50,
-        labelStyle: TextStyle(color: Colors.blue.shade800, fontWeight: FontWeight.w500),
+        labelStyle:
+            TextStyle(color: Colors.blue.shade800, fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -242,9 +296,8 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
     );
   }
 
-  // FIX: This function now accepts the 'data' map to access the required variables
-  Widget _buildBottomActionBar(BuildContext context, {required Map<String, dynamic> data}) {
-    // Extract the needed data inside the function
+  Widget _buildBottomActionBar(BuildContext context,
+      {required Map<String, dynamic> data}) {
     final String name = data['name'] ?? 'This Trip';
     final String imageUrl = data['imageUrl'] ?? '';
 
@@ -252,7 +305,9 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)
+        ],
       ),
       child: Row(
         children: [
@@ -260,7 +315,6 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
             child: ElevatedButton.icon(
               icon: const Icon(Icons.explore),
               label: const Text('Plan Trip'),
-              // UPDATE: The button now correctly navigates to PlanTripPage with all data
               onPressed: () {
                 Navigator.push(
                   context,
@@ -275,7 +329,8 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
               },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ),
@@ -284,12 +339,11 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
             child: OutlinedButton.icon(
               icon: const Icon(Icons.edit),
               label: const Text('Write Review'),
-              onPressed: () {
-                // TODO: Add navigation to a 'Write Review' page
-              },
+              onPressed: () {},
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ),

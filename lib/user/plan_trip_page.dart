@@ -22,6 +22,22 @@ class PlanTripPage extends StatefulWidget {
 class _PlanTripPageState extends State<PlanTripPage> {
   int _numberOfTravelers = 1;
 
+  // Helper to get the correct currency symbol
+  String getCurrencySymbol(String currencyCode) {
+    switch (currencyCode) {
+      case 'INR':
+        return '₹';
+      case 'USD':
+        return '\$';
+      case 'EUR':
+        return '€';
+      case 'GBP':
+        return '£';
+      default:
+        return currencyCode;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -36,10 +52,9 @@ class _PlanTripPageState extends State<PlanTripPage> {
           }
 
           final data = snapshot.data!.data() as Map<String, dynamic>;
-          final double pricePerPerson = (data['pricePerPerson'] as num?)?.toDouble() ?? 0.0;
+          // Correctly read start and end dates
           final DateTime startDate = (data['tripStartDate'] as Timestamp? ?? Timestamp.now()).toDate();
           final DateTime endDate = (data['tripEndDate'] as Timestamp? ?? Timestamp.now()).toDate();
-          final double totalCost = pricePerPerson * _numberOfTravelers;
 
           return CustomScrollView(
             slivers: [
@@ -58,17 +73,12 @@ class _PlanTripPageState extends State<PlanTripPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // --- Admin-Set Dates ---
                         _buildSectionHeader('Trip Dates'),
                         _buildDateInfo(startDate, endDate),
                         const Divider(height: 40),
-
-                        // --- Traveler Selection ---
                         _buildSectionHeader('How Many People?'),
                         _buildTravelerSelector(),
                         const Divider(height: 40),
-
-                        // --- Comments/Reviews Section ---
                         _buildSectionHeader('What Travelers Are Saying'),
                         _buildReviewsList(),
                       ],
@@ -80,7 +90,6 @@ class _PlanTripPageState extends State<PlanTripPage> {
           );
         },
       ),
-      // --- MODIFIED: New Bottom Bar with Cost and Booking Button ---
       bottomNavigationBar: _buildBottomBookingBar(),
     );
   }
@@ -128,7 +137,7 @@ class _PlanTripPageState extends State<PlanTripPage> {
           const Text('Travelers', style: TextStyle(fontSize: 16)),
           DropdownButton<int>(
             value: _numberOfTravelers,
-            underline: const SizedBox(), // Hides the default underline
+            underline: const SizedBox(),
             items: List.generate(10, (i) => i + 1)
                 .map((num) => DropdownMenuItem(value: num, child: Text('$num')))
                 .toList(),
@@ -143,12 +152,12 @@ class _PlanTripPageState extends State<PlanTripPage> {
 
   Widget _buildReviewsList() {
     return SizedBox(
-      height: 150, // Constrain the height of the reviews list
+      height: 150,
       child: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('reviews')
             .where('destinationId', isEqualTo: widget.destinationId)
-            .limit(3) // Show top 3 reviews
+            .limit(3)
             .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -178,7 +187,6 @@ class _PlanTripPageState extends State<PlanTripPage> {
     );
   }
   
-  // NEW: The bottom bar requires a FutureBuilder to get the price
   Widget _buildBottomBookingBar() {
     return FutureBuilder<DocumentSnapshot>(
       future: FirebaseFirestore.instance.collection('destinations').doc(widget.destinationId).get(),
@@ -186,7 +194,9 @@ class _PlanTripPageState extends State<PlanTripPage> {
         if (!snapshot.hasData) return const SizedBox.shrink();
 
         final data = snapshot.data!.data() as Map<String, dynamic>;
-        final pricePerPerson = (data['pricePerPerson'] as num?)?.toDouble() ?? 0.0;
+        // **FIXED: Correctly reading budget and currency data**
+        final pricePerPerson = (data['budget'] as num?)?.toDouble() ?? 0.0;
+        final currency = data['currency'] ?? 'USD';
         final totalCost = pricePerPerson * _numberOfTravelers;
         final startDate = (data['tripStartDate'] as Timestamp?)?.toDate();
         final endDate = (data['tripEndDate'] as Timestamp?)?.toDate();
@@ -200,22 +210,22 @@ class _PlanTripPageState extends State<PlanTripPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Left side: Cost
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text('Total Cost', style: TextStyle(color: Colors.grey)),
-                  Text('\$${totalCost.toStringAsFixed(2)}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  // **MODIFIED: Displaying total cost with the correct currency symbol**
+                  Text('${getCurrencySymbol(currency)}${totalCost.toStringAsFixed(2)}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                 ],
               ),
-              // Right side: Booking Button
               ElevatedButton(
                 onPressed: () {
                   Navigator.push(context, MaterialPageRoute(builder: (context) => BookingPage(
                       destinationId: widget.destinationId,
                       destinationName: widget.destinationName,
                       destinationImageUrl: widget.destinationImageUrl,
+                      // **FIXED: Passing the correct price to the booking page**
                       basePricePerPerson: pricePerPerson,
                       initialStartDate: startDate,
                       initialEndDate: endDate,
