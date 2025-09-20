@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import 'package:intl/intl.dart';
 import 'chat_room_page.dart';
 import 'create_post_page.dart';
+// We are keeping this import in case you need the full page elsewhere.
 import 'comments_page.dart';
 
 // This is the main stateful widget that will manage the page and fetch the current user
@@ -296,7 +297,23 @@ class _CommunityPostCardState extends State<CommunityPostCard> {
                       label: 'Comment ($_commentCount)',
                       color: Colors.grey[700]!,
                       onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => CommentsPage(postId: widget.postDocument.id)));
+                        // **MODIFIED ACTION: Show modal bottom sheet**
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (context) => DraggableScrollableSheet(
+                            initialChildSize: 0.8,
+                            minChildSize: 0.4,
+                            maxChildSize: 0.95,
+                            builder: (context, scrollController) {
+                              return CommentsBottomSheet(
+                                postId: widget.postDocument.id,
+                                scrollController: scrollController,
+                              );
+                            },
+                          ),
+                        );
                       },
                     ),
                   ],
@@ -344,5 +361,165 @@ class _CommunityPostCardState extends State<CommunityPostCard> {
     } else {
       return DateFormat('d MMM, yyyy').format(date);
     }
+  }
+}
+
+// **NEW WIDGET FOR THE FLOATING COMMENTS SCREEN**
+class CommentsBottomSheet extends StatefulWidget {
+  final String postId;
+  final ScrollController scrollController;
+
+  const CommentsBottomSheet({
+    super.key,
+    required this.postId,
+    required this.scrollController,
+  });
+
+  @override
+  State<CommentsBottomSheet> createState() => _CommentsBottomSheetState();
+}
+
+class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
+  final _commentController = TextEditingController();
+  String _currentUserName = 'Guest';
+  String? _currentUserId;
+  String _currentUserImageUrl = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentUser();
+  }
+
+  Future<void> _loadCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (mounted && userDoc.exists) {
+        setState(() {
+          _currentUserId = user.uid;
+          _currentUserName = userDoc.data()?['name'] ?? 'No Name';
+          _currentUserImageUrl = userDoc.data()?['imageUrl'] ?? '';
+        });
+      }
+    }
+  }
+
+  Future<void> _postComment() async {
+    final commentText = _commentController.text.trim();
+    if (commentText.isEmpty || _currentUserId == null) return;
+
+    final postRef = FirebaseFirestore.instance.collection('community_posts').doc(widget.postId);
+    final commentRef = postRef.collection('comments');
+    final batch = FirebaseFirestore.instance.batch();
+
+    batch.set(commentRef.doc(), {
+      'commentText': commentText,
+      'authorName': _currentUserName,
+      'authorUid': _currentUserId,
+      'authorImageUrl': _currentUserImageUrl,
+      'timestamp': Timestamp.now(),
+    });
+    batch.update(postRef, {'commentCount': FieldValue.increment(1)});
+
+    await batch.commit();
+    _commentController.clear();
+    FocusScope.of(context).unfocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 5,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text('Comments', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Divider(),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('community_posts')
+                  .doc(widget.postId)
+                  .collection('comments')
+                  .orderBy('timestamp', descending: false)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                if (snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('Be the first to comment!', style: TextStyle(color: Colors.grey)));
+                }
+                final comments = snapshot.data!.docs;
+                return ListView.builder(
+                  controller: widget.scrollController,
+                  padding: const EdgeInsets.all(12.0),
+                  itemCount: comments.length,
+                  itemBuilder: (context, index) {
+                    final data = comments[index].data() as Map<String, dynamic>;
+                    return CommentBubble(commentData: data);
+                  },
+                );
+              },
+            ),
+          ),
+          _buildCommentInput(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommentInput() {
+    return Container(
+      padding: EdgeInsets.only(
+        left: 12.0,
+        right: 12.0,
+        top: 8.0,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 12.0,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey[200]!)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _commentController,
+              decoration: InputDecoration(
+                hintText: 'Add a comment...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
+                filled: true,
+                fillColor: Colors.grey[100],
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: Theme.of(context).primaryColor,
+            child: IconButton(
+              icon: const Icon(Icons.send, color: Colors.white),
+              onPressed: _postComment,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

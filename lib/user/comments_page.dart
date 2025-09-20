@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class CommentsPage extends StatefulWidget {
   final String postId;
@@ -26,12 +27,13 @@ class _CommentsPageState extends State<CommentsPage> {
   Future<void> _loadCurrentUser() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (mounted && userDoc.exists) {
         setState(() {
           _currentUserId = user.uid;
           _currentUserName = userDoc.data()?['name'] ?? 'No Name';
-          _currentUserImageUrl = userDoc.data()?['imageUrl'] ?? 'https://via.placeholder.com/150';
+          _currentUserImageUrl = userDoc.data()?['imageUrl'] ?? '';
         });
       }
     }
@@ -41,12 +43,12 @@ class _CommentsPageState extends State<CommentsPage> {
     final commentText = _commentController.text.trim();
     if (commentText.isEmpty || _currentUserId == null) return;
 
-    final postRef = FirebaseFirestore.instance.collection('community_posts').doc(widget.postId);
+    final postRef =
+        FirebaseFirestore.instance.collection('community_posts').doc(widget.postId);
     final commentRef = postRef.collection('comments');
 
-    // Use a batch to add the comment and increment the counter atomically
     final batch = FirebaseFirestore.instance.batch();
-    
+
     batch.set(commentRef.doc(), {
       'commentText': commentText,
       'authorName': _currentUserName,
@@ -59,6 +61,7 @@ class _CommentsPageState extends State<CommentsPage> {
 
     await batch.commit();
     _commentController.clear();
+    FocusScope.of(context).unfocus();
   }
 
   @override
@@ -67,44 +70,60 @@ class _CommentsPageState extends State<CommentsPage> {
       appBar: AppBar(
         title: const Text('Comments'),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('community_posts')
-                  .doc(widget.postId)
-                  .collection('comments')
-                  .orderBy('timestamp', descending: false)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                final comments = snapshot.data!.docs;
-                return ListView.builder(
-                  padding: const EdgeInsets.all(8.0),
-                  itemCount: comments.length,
-                  itemBuilder: (context, index) {
-                    final data = comments[index].data() as Map<String, dynamic>;
-                    return ListTile(
-                      leading: CircleAvatar(backgroundImage: NetworkImage(data['authorImageUrl'])),
-                      title: Text(data['authorName'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(data['commentText']),
-                    );
-                  },
-                );
-              },
+      body: Container(
+        color: Colors.grey.shade100,
+        child: Column(
+          children: [
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('community_posts')
+                    .doc(widget.postId)
+                    .collection('comments')
+                    .orderBy('timestamp', descending: false)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.data!.docs.isEmpty) {
+                    return const Center(
+                        child: Text(
+                      'Be the first to comment!',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ));
+                  }
+                  final comments = snapshot.data!.docs;
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(12.0),
+                    itemCount: comments.length,
+                    itemBuilder: (context, index) {
+                      final data = comments[index].data() as Map<String, dynamic>;
+                      return CommentBubble(commentData: data);
+                    },
+                  );
+                },
+              ),
             ),
-          ),
-          _buildCommentInput(),
-        ],
+            _buildCommentInput(),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildCommentInput() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
-      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -2))
+        ],
+      ),
       child: SafeArea(
         child: Row(
           children: [
@@ -113,16 +132,104 @@ class _CommentsPageState extends State<CommentsPage> {
                 controller: _commentController,
                 decoration: InputDecoration(
                   hintText: 'Add a comment...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[200],
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 ),
               ),
             ),
-            IconButton(
-              icon: Icon(Icons.send, color: Theme.of(context).primaryColor),
-              onPressed: _postComment,
+            const SizedBox(width: 8),
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: Theme.of(context).primaryColor,
+              child: IconButton(
+                icon: const Icon(Icons.send, color: Colors.white),
+                onPressed: _postComment,
+              ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class CommentBubble extends StatelessWidget {
+  final Map<String, dynamic> commentData;
+
+  const CommentBubble({super.key, required this.commentData});
+
+  @override
+  Widget build(BuildContext context) {
+    final authorName = commentData['authorName'] ?? 'Anonymous';
+    final authorImageUrl = commentData['authorImageUrl'] ?? '';
+    final commentText = commentData['commentText'] ?? '';
+    final timestamp = (commentData['timestamp'] as Timestamp?)?.toDate();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundImage:
+                authorImageUrl.isNotEmpty ? NetworkImage(authorImageUrl) : null,
+            child: authorImageUrl.isEmpty
+                ? const Icon(Icons.person, size: 20)
+                : null,
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(authorName,
+                    style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87)),
+                const SizedBox(height: 4),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10.0, horizontal: 15.0),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(15),
+                      bottomLeft: Radius.circular(15),
+                      bottomRight: Radius.circular(15),
+                    ),
+                     boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 5,
+                          offset: const Offset(0, 1),
+                        )
+                      ]
+                  ),
+                  child: Text(
+                    commentText,
+                    style: const TextStyle(color: Colors.black87, fontSize: 15.0),
+                  ),
+                ),
+                 if (timestamp != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5.0, left: 5.0),
+                    child: Text(
+                      DateFormat('hh:mm a, d MMM').format(timestamp),
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
