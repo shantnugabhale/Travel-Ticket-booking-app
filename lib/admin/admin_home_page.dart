@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:trevel_booking_app/admin/create_subadmin_page.dart';
 import 'package:trevel_booking_app/admin/manage_admins_page.dart';
+import 'package:trevel_booking_app/admin/manage_chat_rooms_page.dart';
 import 'package:trevel_booking_app/admin/manage_posts_page.dart';
+import 'package:trevel_booking_app/admin/manage_user_posts_page.dart';
 import 'package:trevel_booking_app/admin/upload_destination_page.dart';
 import 'admin_login.dart'; // Make sure to import your admin login page
 
@@ -43,14 +45,22 @@ class AdminHomePage extends StatelessWidget {
               icon: Icons.upload_file,
               title: 'Upload Post',
               onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => UploadDestinationPage()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => UploadDestinationPage(),
+                  ),
+                );
               },
             ),
             DashboardCard(
               icon: Icons.edit_calendar,
               title: 'Manage Post',
               onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => ManagePostsPage()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ManagePostsPage()),
+                );
               },
             ),
             DashboardCard(
@@ -65,14 +75,44 @@ class AdminHomePage extends StatelessWidget {
               icon: Icons.person_add,
               title: 'Create Subadmin',
               onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) =>CreateSubadminPage()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => CreateSubadminPage()),
+                );
               },
             ),
             DashboardCard(
               icon: Icons.manage_accounts,
               title: 'Manage Admins',
               onTap: () {
-                 Navigator.push(context, MaterialPageRoute(builder: (context)=>ManageAdminsPage()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ManageAdminsPage()),
+                );
+              },
+            ),
+            DashboardCard(
+              icon: Icons.supervised_user_circle,
+              title: 'Manage User Posts',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ManageUserPostsPage(),
+                  ),
+                );
+              },
+            ),
+            DashboardCard(
+              icon: Icons.chat_bubble_outline,
+              title: 'Moderate Chats',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ManageChatRoomsPage(),
+                  ),
+                );
               },
             ),
           ],
@@ -100,9 +140,7 @@ class DashboardCard extends StatelessWidget {
     return Card(
       elevation: 2.0,
       margin: const EdgeInsets.only(bottom: 16.0),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12.0),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
       child: InkWell(
         borderRadius: BorderRadius.circular(12.0),
         onTap: onTap,
@@ -110,11 +148,7 @@ class DashboardCard extends StatelessWidget {
           padding: const EdgeInsets.all(20.0),
           child: Row(
             children: [
-              Icon(
-                icon,
-                size: 30.0,
-                color: Theme.of(context).primaryColor,
-              ),
+              Icon(icon, size: 30.0, color: Theme.of(context).primaryColor),
               const SizedBox(width: 20.0),
               Text(
                 title,
