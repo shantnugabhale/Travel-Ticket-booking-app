@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:trevel_booking_app/services/data.dart'; // Import your secret key
-import 'ticket_confirmation_page.dart'; // Import the new page
+import 'package:trevel_booking_app/services/data.dart';
+import 'ticket_confirmation_page.dart';
 
 class PaymentPage extends StatefulWidget {
   final double totalCost;
@@ -34,53 +35,79 @@ class _PaymentPageState extends State<PaymentPage> {
     }
   }
 
+  // MODIFIED: This function now contains the complete fix.
   Future<void> makePayment() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() { _isLoading = true; });
 
     try {
+      // Step 1: Create the payment intent from your server/backend
       paymentIntent = await createPaymentIntent(widget.totalCost, widget.currency);
 
-      if (paymentIntent == null || paymentIntent!['client_secret'] == null) {
-        _showError('Failed to create payment intent. Please try again.');
+      // Step 2: Safely get the client secret
+      final clientSecret = paymentIntent?['client_secret'];
+
+      // Step 3: Check if the client secret is null. If it is, show an error and stop.
+      // This is the direct fix for the "Unexpected null value" error.
+      if (clientSecret == null) {
+        _showError('Could not initialize payment. Please try again.');
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      await Stripe.instance.initPaymentSheet(
-        paymentSheetParameters: SetupPaymentSheetParameters(
-          paymentIntentClientSecret: paymentIntent!['client_secret'],
-          style: ThemeMode.light,
-          merchantDisplayName: 'Travel Booking App',
-        ),
-      );
-
-      await displayPaymentSheet();
+      // Step 4: Check if the app is running on the web
+      if (kIsWeb) {
+        // --- WEB-SPECIFIC PAYMENT FLOW ---
+        await Stripe.instance.confirmPayment(
+          paymentIntentClientSecret: clientSecret,
+          data: const PaymentMethodParams.card(
+            paymentMethodData: PaymentMethodData(
+              billingDetails: BillingDetails(),
+            ),
+          ),
+        );
+        _onPaymentSuccess();
+      } else {
+        // --- MOBILE-SPECIFIC PAYMENT FLOW ---
+        await Stripe.instance.initPaymentSheet(
+          paymentSheetParameters: SetupPaymentSheetParameters(
+            paymentIntentClientSecret: clientSecret,
+            style: ThemeMode.light,
+            merchantDisplayName: 'Travel Booking App',
+          ),
+        );
+        await displayPaymentSheet();
+      }
     } catch (e) {
-      _showError('An unexpected error occurred: $e');
+       if (e is StripeException) {
+         _showError('Payment failed: ${e.error.localizedMessage ?? "An unknown Stripe error occurred."}');
+       } else {
+        _showError('An unexpected error occurred: $e');
+       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() { _isLoading = false; });
       }
     }
+  }
+
+  void _onPaymentSuccess() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text("Payment Successful"), backgroundColor: Colors.green),
+    );
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => TicketConfirmationPage(
+          bookingDetails: widget.bookingDetails,
+        ),
+      ),
+    );
   }
 
   Future<void> displayPaymentSheet() async {
     try {
       await Stripe.instance.presentPaymentSheet();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text("Payment Successful"), backgroundColor: Colors.green),
-      );
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => TicketConfirmationPage(
-            bookingDetails: widget.bookingDetails,
-          ),
-        ),
-      );
+      _onPaymentSuccess();
     } on StripeException catch (e) {
       _showError('Payment failed: ${e.error.localizedMessage}');
     } catch (e) {
@@ -130,7 +157,6 @@ class _PaymentPageState extends State<PaymentPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Extracting details for easier access
     final details = widget.bookingDetails;
     final travelers = details['travelers'] as List<dynamic>;
 
@@ -143,7 +169,6 @@ class _PaymentPageState extends State<PaymentPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Destination Details
             _buildSectionHeader("Trip Details"),
             Card(
               child: Padding(
@@ -160,7 +185,6 @@ class _PaymentPageState extends State<PaymentPage> {
             ),
             const SizedBox(height: 24),
 
-            // Traveler Details
             _buildSectionHeader("Traveler(s)"),
             ...travelers.asMap().entries.map((entry) {
               int idx = entry.key;
@@ -181,11 +205,10 @@ class _PaymentPageState extends State<PaymentPage> {
                 ),
               );
             }).toList(),
-            const SizedBox(height: 100), // Extra space to not be hidden by the button
+            const SizedBox(height: 100),
           ],
         ),
       ),
-      // NEW: Bottom navigation bar for the payment button
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(16.0),
         decoration: BoxDecoration(
@@ -220,7 +243,7 @@ class _PaymentPageState extends State<PaymentPage> {
                   textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3,))
                     : const Text("Proceed to Payment"),
               ),
             ],
@@ -230,7 +253,6 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // NEW: Helper widget to build section headers
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
@@ -241,7 +263,6 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  // NEW: Helper widget to display a row of details
   Widget _buildDetailRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),

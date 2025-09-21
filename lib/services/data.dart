@@ -1,2 +1,0 @@
-String publishedkey = " ";
-String secrekey = " ";
