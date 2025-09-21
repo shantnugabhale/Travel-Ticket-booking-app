@@ -100,7 +100,7 @@ class _BookingPageState extends State<BookingPage> {
     super.dispose();
   }
 
-  Future<void> _bookTickets() async {
+  Future<void> _proceedToPayment() async {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -138,9 +138,11 @@ class _BookingPageState extends State<BookingPage> {
       'totalCost': widget.basePricePerPerson * _numberOfTravelers,
       'status': 'Booked',
       'bookedAt': Timestamp.now(),
+      'paymentIntentId': null, // This will be filled in on the Payment Page
     };
 
-    final result = await Navigator.push(
+    // Navigate to payment page without waiting for a result
+    Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => PaymentPage(
@@ -150,26 +152,6 @@ class _BookingPageState extends State<BookingPage> {
         ),
       ),
     );
-
-    if (result == true) {
-      try {
-        await FirebaseFirestore.instance.collection('bookings').add(bookingDetails);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Booking successful!'),
-                backgroundColor: Colors.green),
-          );
-          Navigator.of(context).popUntil((route) => route.isFirst);
-        }
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Booking failed: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
 
     if (mounted) {
       setState(() {
@@ -266,7 +248,7 @@ class _BookingPageState extends State<BookingPage> {
                   : SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _bookTickets,
+                        onPressed: _proceedToPayment,
                         style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16)),
                         child: const Text('Proceed to Payment',
@@ -320,11 +302,11 @@ class _BookingPageState extends State<BookingPage> {
       future: _destinationFuture,
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
-        
+
         final data = snapshot.data!.data() as Map<String, dynamic>;
         final currency = data['currency'] ?? 'USD';
         final totalCost = widget.basePricePerPerson * _numberOfTravelers;
-        
+
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [

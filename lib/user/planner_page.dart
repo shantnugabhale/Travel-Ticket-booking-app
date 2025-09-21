@@ -1,191 +1,245 @@
 import 'package:flutter/material.dart';
- 
-import 'dart:ui'; // For BackdropFilter
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
+import 'package:trevel_booking_app/user/community_page.dart';
+import 'package:trevel_booking_app/user/destination_detail_page.dart';
+import 'package:trevel_booking_app/user/home_page.dart';
+import 'package:trevel_booking_app/user/user_ticket_page.dart'; // Import the new ticket page
 
-class PlannerPage extends StatelessWidget {
+class PlannerPage extends StatefulWidget {
   const PlannerPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Placeholder data for demonstration.
-    // In a real app, this would come from a StreamBuilder connected to Firestore.
-    final List<Map<String, dynamic>> upcomingTrips = [
-      {
-        'imageUrl': 'https://images.unsplash.com/photo-1502602898657-3e91760c0337?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=320',
-        'destination': 'Paris, France',
-        'dates': 'Oct 10 - Oct 17, 2025',
-        'status': 'Upcoming',
-      },
-      {
-        'imageUrl': 'https://images.unsplash.com/photo-1533929736458-ca588913c835?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=320',
-        'destination': 'Kyoto, Japan',
-        'dates': 'Nov 22 - Nov 29, 2025',
-        'status': 'Upcoming',
-      }
-    ];
+  State<PlannerPage> createState() => _PlannerPageState();
+}
 
-    final List<Map<String, dynamic>> pastTrips = [
-      {
-        'imageUrl': 'https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=320',
-        'destination': 'Rome, Italy',
-        'dates': 'May 05 - May 12, 2024',
-        'status': 'Completed',
-      }
-    ];
+class _PlannerPageState extends State<PlannerPage> {
+  String? _currentUserId;
+  // Cache for the 'Saved' tab to prevent image flickering
+  final Map<String, Future<List<DocumentSnapshot>>> _savedDestinationsCache = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _currentUserId = FirebaseAuth.instance.currentUser?.uid;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_currentUserId == null) {
+      return const Center(child: Text('Please log in to see your planner.'));
+    }
 
     return DefaultTabController(
-      length: 3, // Number of tabs
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('My Trip Planner'),
-          centerTitle: true,
+          title: const Text('My Planner'),
+          centerTitle: false,
           backgroundColor: Colors.white,
           elevation: 1,
           bottom: const TabBar(
             tabs: [
-              Tab(text: 'Upcoming'),
-              Tab(text: 'Past Trips'),
-              Tab(text: 'Saved Ideas'),
+              Tab(icon: Icon(Icons.luggage), text: 'Booked Trips'),
+              Tab(icon: Icon(Icons.favorite), text: 'Saved'),
+              Tab(icon: Icon(Icons.thumb_up), text: 'Liked Posts'),
             ],
-            labelColor: Colors.black,
+            labelColor: Colors.blue,
             unselectedLabelColor: Colors.grey,
             indicatorColor: Colors.blue,
           ),
         ),
         body: TabBarView(
           children: [
-            // Upcoming Trips Tab
-            _buildTripList(upcomingTrips),
-
-            // Past Trips Tab
-            _buildTripList(pastTrips),
-
-            // Saved Ideas Tab (Placeholder)
-            const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.lightbulb_outline, size: 60, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('No saved ideas yet.', style: TextStyle(fontSize: 16, color: Colors.grey)),
-                ],
-              ),
-            ),
+            _buildBookedTripsList(_currentUserId!),
+            _buildSavedDestinationsList(_currentUserId!),
+            _buildLikedPostsList(_currentUserId!),
           ],
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () {
-            // TODO: Navigate to a "Create New Trip" page
-          },
-          label: const Text('Plan a New Trip'),
-          icon: const Icon(Icons.add),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       ),
     );
   }
 
-  /// A reusable widget to build the list of trip cards.
-  Widget _buildTripList(List<Map<String, dynamic>> trips) {
-    if (trips.isEmpty) {
-      return const Center(child: Text('No trips in this category.'));
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16.0),
-      itemCount: trips.length,
-      itemBuilder: (context, index) {
-        final trip = trips[index];
-        return TripCard(
-          imageUrl: trip['imageUrl'],
-          destination: trip['destination'],
-          dates: trip['dates'],
-          status: trip['status'],
+  /// This widget displays the user's booked trips and navigates to the ticket page on tap.
+  Widget _buildBookedTripsList(String userId) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('bookings')
+          .where('userId', isEqualTo: userId)
+          .orderBy('bookedAt', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          debugPrint("Firestore Stream Error: ${snapshot.error}");
+          return const Center(
+              child: Text('Could not connect to your trips. Please try again later.'));
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('You have no booked trips yet.'));
+        }
+
+        final bookings = snapshot.data!.docs;
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16.0),
+          itemCount: bookings.length,
+          itemBuilder: (context, index) {
+            final doc = bookings[index];
+            final data = doc.data() as Map<String, dynamic>? ?? {};
+
+            final String destinationName = data['destinationName'] as String? ?? 'Unnamed Trip';
+            final String imageUrl = data['destinationImageUrl'] as String? ?? '';
+            
+            String formattedDate = 'Date not specified';
+            if (data['startDate'] is Timestamp) {
+              formattedDate = DateFormat('dd MMM, yyyy').format((data['startDate'] as Timestamp).toDate());
+            }
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 16),
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundImage: (imageUrl.isNotEmpty && Uri.tryParse(imageUrl)?.isAbsolute == true)
+                      ? NetworkImage(imageUrl)
+                      : null,
+                  child: (imageUrl.isEmpty || Uri.tryParse(imageUrl)?.isAbsolute != true)
+                      ? const Icon(Icons.flight_takeoff)
+                      : null,
+                ),
+                title: Text(destinationName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('Trip Date: $formattedDate'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  // **UPDATED:** Navigates to the new UserTicketPage
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => UserTicketPage(bookingDocument: doc),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
         );
       },
     );
   }
-}
 
-/// A custom card widget to display a summary of a planned trip.
-class TripCard extends StatelessWidget {
-  final String imageUrl;
-  final String destination;
-  final String dates;
-  final String status;
+  /// This function for the 'Saved' tab now uses a cache to prevent images
+  /// from reloading every time you switch tabs.
+  Widget _buildSavedDestinationsList(String userId) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('saved_destinations')
+          .orderBy('savedAt', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('You have no saved destinations.'));
+        }
+        final savedDocs = snapshot.data!.docs;
+        final destinationIds = savedDocs.map((doc) => doc.id).toList();
+        final cacheKey = destinationIds.join(',');
 
-  const TripCard({
-    super.key,
-    required this.imageUrl,
-    required this.destination,
-    required this.dates,
-    required this.status,
-  });
+        // Use the cache to avoid re-fetching data unnecessarily
+        Future<List<DocumentSnapshot>> getFuture() {
+          if (_savedDestinationsCache.containsKey(cacheKey)) {
+            return _savedDestinationsCache[cacheKey]!;
+          } else {
+            final future = _getDestinationsFromIds(destinationIds);
+            _savedDestinationsCache[cacheKey] = future;
+            return future;
+          }
+        }
 
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias, // Ensures the image respects the card's rounded corners
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
-      elevation: 4,
-      margin: const EdgeInsets.only(bottom: 20.0),
-      child: InkWell(
-        onTap: () {
-          // TODO: Navigate to the detailed itinerary for this trip
-        },
-        child: Container(
-          height: 220,
-          decoration: BoxDecoration(
-            image: DecorationImage(
-              image: NetworkImage(imageUrl),
-              fit: BoxFit.cover,
-              colorFilter: ColorFilter.mode(
-                Colors.black.withOpacity(0.3), // Darken the image for better text contrast
-                BlendMode.darken,
+        return FutureBuilder<List<DocumentSnapshot>>(
+          future: getFuture(),
+          builder: (context, destSnapshot) {
+            if (!destSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final destinations = destSnapshot.data!;
+            return GridView.builder(
+              padding: const EdgeInsets.all(16.0),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 0.7,
               ),
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  destination,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    shadows: [Shadow(blurRadius: 10, color: Colors.black)],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                // Using a frosted glass effect for the date container
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        dates,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
-                        ),
-                      ),
+              itemCount: destinations.length,
+              itemBuilder: (context, index) {
+                final destination = destinations[index];
+                final data = destination.data() as Map<String, dynamic>;
+                return DestinationCard(
+                  imageUrl: data['imageUrl'] ?? '',
+                  name: data['name'] ?? '',
+                  location: data['location'] ?? '',
+                  rating: data['safetyRating']?.toDouble() ?? 0.0,
+                  price: data['budget']?.toInt() ?? 0,
+                  currency: data['currency'] ?? '\$',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          DestinationDetailPage(destinationId: destination.id),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<List<DocumentSnapshot>> _getDestinationsFromIds(
+      List<String> ids) async {
+    if (ids.isEmpty) return [];
+    final futures = ids.map((id) =>
+        FirebaseFirestore.instance.collection('destinations').doc(id).get());
+    final results = await Future.wait(futures);
+    return results.where((doc) => doc.exists).toList();
+  }
+
+  Widget _buildLikedPostsList(String userId) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('community_posts')
+          .where('likedBy', arrayContains: userId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('You haven\'t liked any posts yet.'));
+        }
+        final posts = snapshot.data!.docs;
+        return ListView.builder(
+          itemCount: posts.length,
+          itemBuilder: (context, index) {
+            final post = posts[index];
+            return CommunityPostCard(
+              postDocument: post,
+              currentUserId: userId,
+            );
+          },
+        );
+      },
     );
   }
 }

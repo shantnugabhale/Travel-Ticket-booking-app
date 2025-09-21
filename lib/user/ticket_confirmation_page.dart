@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'package:trevel_booking_app/user/home_page.dart'; // Import HomePage
 
 class TicketConfirmationPage extends StatefulWidget {
   final Map<String, dynamic> bookingDetails;
@@ -24,6 +25,16 @@ class _TicketConfirmationPageState extends State<TicketConfirmationPage>
     );
     _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
     _controller.forward();
+
+    // Automatically navigate to PlannerPage after a delay
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const HomePage(initialPageIndex: 1)),
+          (Route<dynamic> route) => false,
+        );
+      }
+    });
   }
 
   @override
@@ -59,6 +70,14 @@ class _TicketConfirmationPageState extends State<TicketConfirmationPage>
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'You will be redirected to your planner shortly.',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey,
                 ),
               ),
               const SizedBox(height: 40),

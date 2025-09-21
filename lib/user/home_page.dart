@@ -8,14 +8,21 @@ import 'destination_detail_page.dart';
 import 'planner_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final int initialPageIndex;
+  const HomePage({super.key, this.initialPageIndex = 0});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  int _selectedIndex = 0;
+  late int _selectedIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = widget.initialPageIndex;
+  }
 
   static const List<Widget> _pages = <Widget>[
     HomePageContent(),

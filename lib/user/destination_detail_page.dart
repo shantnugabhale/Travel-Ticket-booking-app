@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:trevel_booking_app/user/plan_trip_page.dart';
@@ -13,6 +14,9 @@ class DestinationDetailPage extends StatefulWidget {
 
 class _DestinationDetailPageState extends State<DestinationDetailPage> {
   bool _isFavorited = false;
+  bool _isFavoriteLoading = true;
+  String? _currentUserId;
+
   late Future<DocumentSnapshot> _destinationFuture;
 
   @override
@@ -22,7 +26,57 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
         .collection('destinations')
         .doc(widget.destinationId)
         .get();
+    _checkIfFavorited();
   }
+  
+  Future<void> _checkIfFavorited() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _currentUserId = user.uid;
+      final favoriteDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUserId)
+          .collection('saved_destinations')
+          .doc(widget.destinationId)
+          .get();
+      if (mounted) {
+        setState(() {
+          _isFavorited = favoriteDoc.exists;
+          _isFavoriteLoading = false;
+        });
+      }
+    } else {
+      setState(() {
+        _isFavoriteLoading = false;
+      });
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (_currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be logged in to save destinations.')),
+      );
+      return;
+    }
+
+    setState(() { _isFavorited = !_isFavorited; });
+
+    final favoriteRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(_currentUserId)
+        .collection('saved_destinations')
+        .doc(widget.destinationId);
+
+    if (_isFavorited) {
+      // Add to favorites by setting the document
+      await favoriteRef.set({'savedAt': Timestamp.now()});
+    } else {
+      // Remove from favorites
+      await favoriteRef.delete();
+    }
+  }
+
 
   // Helper to get the correct currency symbol
   String getCurrencySymbol(String currencyCode) {
@@ -111,13 +165,15 @@ class _DestinationDetailPageState extends State<DestinationDetailPage> {
                   ),
                 ),
                 actions: [
-                  IconButton(
+                  _isFavoriteLoading 
+                  ? const Padding(padding: EdgeInsets.all(16.0), child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white)))
+                  : IconButton(
                     icon: Icon(
                         _isFavorited
                             ? Icons.favorite
                             : Icons.favorite_border,
                         color: _isFavorited ? Colors.red : Colors.white),
-                    onPressed: () => setState(() => _isFavorited = !_isFavorited),
+                    onPressed: _toggleFavorite,
                   ),
                 ],
               ),
