@@ -1,6 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:trevel_booking_app/Auth/login_page.dart';
 import 'package:trevel_booking_app/user/Tips_page.dart';
 import 'package:trevel_booking_app/user/community_page.dart';
 import 'package:trevel_booking_app/user/reviews_page.dart';
@@ -46,12 +51,18 @@ class _HomePageState extends State<HomePage> {
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(
-              icon: Icon(Icons.calendar_today), label: 'Planner'),
+            icon: Icon(Icons.calendar_today),
+            label: 'Planner',
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.lightbulb_outline), label: 'Tips'),
+            icon: Icon(Icons.lightbulb_outline),
+            label: 'Tips',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Community'),
           BottomNavigationBarItem(
-              icon: Icon(Icons.star_border), label: 'Reviews'),
+            icon: Icon(Icons.star_border),
+            label: 'Reviews',
+          ),
         ],
         currentIndex: _selectedIndex,
         selectedItemColor: Theme.of(context).primaryColor,
@@ -76,23 +87,160 @@ class _HomePageContentState extends State<HomePageContent> {
   final String _userLocation = "New York, USA";
   String _selectedCategory = 'All';
 
+  // Firebase instances
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
+  final ImagePicker _picker = ImagePicker();
+
+  String? _userImageUrl;
+  String? _userEmail;
+  String? _userName;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      try {
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        if (mounted) {
+          setState(() {
+            _userImageUrl = doc.data()?['imageUrl'];
+            _userEmail = user.email;
+            _userName = doc.data()?['name'];
+          });
+        }
+      } catch (e) {
+        // Handle error, maybe show a snackbar
+      }
+    }
+  }
+
   void _onCategorySelected(String category) {
     setState(() {
       _selectedCategory = category;
     });
   }
 
+  Future<void> _pickAndUploadImage() async {
+    final pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 50,
+    );
+
+    if (pickedFile == null) return;
+
+    File imageFile = File(pickedFile.path);
+    try {
+      final user = _auth.currentUser!;
+      final ref = _storage.ref().child('user_images').child('${user.uid}.jpg');
+      await ref.putFile(imageFile);
+      final url = await ref.getDownloadURL();
+      await _firestore.collection('users').doc(user.uid).update({
+        'imageUrl': url,
+      });
+      await _loadUserData(); // Refresh image in the UI
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile picture updated successfully!'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error uploading image: $e')));
+      }
+    }
+  }
+
+  Future<void> _logout() async {
+    await _auth.signOut();
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+        (Route<dynamic> route) => false,
+      );
+    }
+  }
+
+  void _showProfileDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 20.0,
+            horizontal: 10.0,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: 40,
+                backgroundImage: _userImageUrl != null
+                    ? NetworkImage(_userImageUrl!)
+                    : const NetworkImage('https://via.placeholder.com/150')
+                          as ImageProvider,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _userName ?? 'User',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _userEmail ?? 'No Email',
+                style: const TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+              const SizedBox(height: 10),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.photo_camera),
+                title: const Text('Change Picture'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _pickAndUploadImage();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title: const Text(
+                  'Logout',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _logout();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Determine the query based on the selected category
-    Query destinationsQuery;
-    if (_selectedCategory == 'All') {
-      destinationsQuery = FirebaseFirestore.instance.collection('destinations');
-    } else {
-      destinationsQuery = FirebaseFirestore.instance
-          .collection('destinations')
-          .where('category', isEqualTo: _selectedCategory);
-    }
+    Query destinationsQuery = _selectedCategory == 'All'
+        ? _firestore.collection('destinations')
+        : _firestore
+              .collection('destinations')
+              .where('category', isEqualTo: _selectedCategory);
 
     return Scaffold(
       appBar: AppBar(
@@ -100,19 +248,27 @@ class _HomePageContentState extends State<HomePageContent> {
         centerTitle: false,
         actions: [
           IconButton(
-              icon: const Icon(Icons.notifications_none, size: 28),
-              onPressed: () {}),
+            icon: const Icon(Icons.notifications_none, size: 28),
+            onPressed: () {},
+          ),
           const SizedBox(width: 8),
-          const CircleAvatar(
-              backgroundImage: NetworkImage('https://via.placeholder.com/150'),
-              radius: 18),
+          GestureDetector(
+            onTap: _showProfileDialog,
+            child: CircleAvatar(
+              backgroundImage: _userImageUrl != null
+                  ? NetworkImage(_userImageUrl!)
+                  : const NetworkImage('https://via.placeholder.com/150')
+                        as ImageProvider,
+              radius: 18,
+            ),
+          ),
           const SizedBox(width: 16),
         ],
         backgroundColor: Colors.white,
         elevation: 0,
         toolbarHeight: 60,
       ),
-      drawer: const AppDrawer(),
+      // No Drawer anymore
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -124,20 +280,27 @@ class _HomePageContentState extends State<HomePageContent> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Welcome Back!',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.bold)),
+                    Text(
+                      'Welcome Back, ${_userName ?? 'User'}!',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.location_on,
-                            color: Colors.grey, size: 18),
+                        const Icon(
+                          Icons.location_on,
+                          color: Colors.grey,
+                          size: 18,
+                        ),
                         const SizedBox(width: 4),
-                        Text(_userLocation,
-                            style: const TextStyle(
-                                color: Colors.grey, fontSize: 16)),
+                        Text(
+                          _userLocation,
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 16,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -146,12 +309,12 @@ class _HomePageContentState extends State<HomePageContent> {
                         hintText: 'Search destinations...',
                         prefixIcon: const Icon(Icons.search),
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none),
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
                         filled: true,
                         fillColor: Colors.grey[200],
-                        contentPadding:
-                            const EdgeInsets.symmetric(vertical: 0),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
                       ),
                     ),
                   ],
@@ -160,26 +323,28 @@ class _HomePageContentState extends State<HomePageContent> {
               const SizedBox(height: 24),
               _buildCategoryFilter(),
               const SizedBox(height: 32),
-              
-              // Featured Destinations Section
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text('Featured Destinations',
-                    style:
-                        TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                child: Text(
+                  'Featured Destinations',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
               ),
               const SizedBox(height: 16),
               SizedBox(
                 height: 250,
                 child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
+                  stream: _firestore
                       .collection('destinations')
                       .where('isFeatured', isEqualTo: true)
                       .snapshots(),
                   builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                     if (snapshot.data!.docs.isEmpty) {
-                      return const Center(child: Text('No featured items yet.'));
+                    if (!snapshot.hasData)
+                      return const Center(child: CircularProgressIndicator());
+                    if (snapshot.data!.docs.isEmpty) {
+                      return const Center(
+                        child: Text('No featured items yet.'),
+                      );
                     }
                     return AnimationLimiter(
                       child: ListView.builder(
@@ -197,12 +362,23 @@ class _HomePageContentState extends State<HomePageContent> {
                               horizontalOffset: 50.0,
                               child: FadeInAnimation(
                                 child: DestinationCard(
-                                  imageUrl: data['imageUrl'] ?? '', name: data['name'] ?? '', location: data['location'] ?? '',
-                                  rating: data['safetyRating']?.toDouble() ?? 0.0, 
+                                  imageUrl: data['imageUrl'] ?? '',
+                                  name: data['name'] ?? '',
+                                  location: data['location'] ?? '',
+                                  rating:
+                                      data['safetyRating']?.toDouble() ?? 0.0,
                                   price: data['budget']?.toInt() ?? 0,
-                                  currency: data['currency'] ?? '\$', 
+                                  currency: data['currency'] ?? '\$',
                                   isFeatured: true,
-                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DestinationDetailPage(destinationId: destination.id))),
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          DestinationDetailPage(
+                                            destinationId: destination.id,
+                                          ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -214,13 +390,12 @@ class _HomePageContentState extends State<HomePageContent> {
                 ),
               ),
               const SizedBox(height: 32),
-              
-              // Popular Destinations Section
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text('Popular Destinations',
-                    style:
-                        TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                child: Text(
+                  'Popular Destinations',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
               ),
               const SizedBox(height: 16),
               Padding(
@@ -228,20 +403,30 @@ class _HomePageContentState extends State<HomePageContent> {
                 child: StreamBuilder<QuerySnapshot>(
                   stream: destinationsQuery.snapshots(),
                   builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                    if (snapshot.data!.docs.isEmpty) return const Center(heightFactor: 5, child: Text('No destinations found for this category.'));
-                    
+                    if (!snapshot.hasData)
+                      return const Center(child: CircularProgressIndicator());
+                    if (snapshot.data!.docs.isEmpty)
+                      return const Center(
+                        heightFactor: 5,
+                        child: Text('No destinations found for this category.'),
+                      );
+
                     return AnimationLimiter(
                       child: GridView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 0.7,
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              childAspectRatio: 0.7,
+                            ),
                         itemCount: snapshot.data!.docs.length,
                         itemBuilder: (context, index) {
                           final destination = snapshot.data!.docs[index];
-                          final data = destination.data() as Map<String, dynamic>;
+                          final data =
+                              destination.data() as Map<String, dynamic>;
                           return AnimationConfiguration.staggeredGrid(
                             position: index,
                             duration: const Duration(milliseconds: 375),
@@ -249,11 +434,22 @@ class _HomePageContentState extends State<HomePageContent> {
                             child: ScaleAnimation(
                               child: FadeInAnimation(
                                 child: DestinationCard(
-                                  imageUrl: data['imageUrl'] ?? '', name: data['name'] ?? '', location: data['location'] ?? '',
-                                  rating: data['safetyRating']?.toDouble() ?? 0.0, 
+                                  imageUrl: data['imageUrl'] ?? '',
+                                  name: data['name'] ?? '',
+                                  location: data['location'] ?? '',
+                                  rating:
+                                      data['safetyRating']?.toDouble() ?? 0.0,
                                   price: data['budget']?.toInt() ?? 0,
                                   currency: data['currency'] ?? '\$',
-                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DestinationDetailPage(destinationId: destination.id))),
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          DestinationDetailPage(
+                                            destinationId: destination.id,
+                                          ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -303,7 +499,7 @@ class _HomePageContentState extends State<HomePageContent> {
   }
 }
 
-// ALL HELPER WIDGETS BELOW (No changes needed here, but included for completeness)
+// ALL HELPER WIDGETS BELOW
 
 class CategoryChip extends StatelessWidget {
   final String label;
@@ -333,42 +529,21 @@ class CategoryChip extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: isSelected ? Colors.white : Colors.black54),
+            Icon(
+              icon,
+              size: 20,
+              color: isSelected ? Colors.white : Colors.black54,
+            ),
             const SizedBox(width: 8),
-            Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: FontWeight.w500)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class AppDrawer extends StatelessWidget {
-  const AppDrawer({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: <Widget>[
-          const UserAccountsDrawerHeader(
-            accountName: Text("Shantnu"),
-            accountEmail: Text("shantnu@example.com"),
-            currentAccountPicture: CircleAvatar(backgroundImage: NetworkImage('https://via.placeholder.com/150')),
-            decoration: BoxDecoration(
-              color: Colors.blue,
-              image: DecorationImage(
-                fit: BoxFit.cover,
-                image: NetworkImage('https://images.unsplash.com/photo-1542051841857-5f90071e7989'),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.black87,
+                fontWeight: FontWeight.w500,
               ),
             ),
-          ),
-          ListTile(leading: const Icon(Icons.account_circle), title: const Text('Profile'), onTap: () => Navigator.pop(context)),
-          ListTile(leading: const Icon(Icons.bookmark_border), title: const Text('Saved Trips'), onTap: () => Navigator.pop(context)),
-          ListTile(leading: const Icon(Icons.settings), title: const Text('Settings'), onTap: () => Navigator.pop(context)),
-          const Divider(),
-          ListTile(leading: const Icon(Icons.exit_to_app), title: const Text('Logout'), onTap: () => Navigator.pop(context)),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -421,13 +596,22 @@ class DestinationCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 3))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 1,
+              blurRadius: 5,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
               child: Image.network(
                 imageUrl,
                 height: isFeatured ? 140 : 120,
@@ -436,7 +620,9 @@ class DestinationCard extends StatelessWidget {
                 errorBuilder: (context, error, stackTrace) => Container(
                   height: isFeatured ? 140 : 120,
                   color: Colors.grey[300],
-                  child: const Center(child: Icon(Icons.image_not_supported, color: Colors.grey)),
+                  child: const Center(
+                    child: Icon(Icons.image_not_supported, color: Colors.grey),
+                  ),
                 ),
               ),
             ),
@@ -447,11 +633,27 @@ class DestinationCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Flexible(
-                      child: Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Flexible(
-                      child: Text(location, style: const TextStyle(fontSize: 14, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        location,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const Spacer(),
                     Row(
@@ -461,17 +663,31 @@ class DestinationCard extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.star, color: Colors.amber[600], size: 18),
+                              Icon(
+                                Icons.star,
+                                color: Colors.amber[600],
+                                size: 18,
+                              ),
                               const SizedBox(width: 4),
-                              Flexible(child: Text('$rating', overflow: TextOverflow.ellipsis)),
+                              Flexible(
+                                child: Text(
+                                  '$rating',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             ],
                           ),
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).primaryColor.withOpacity(0.1),
+                            color: Theme.of(
+                              context,
+                            ).primaryColor.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
