@@ -124,9 +124,9 @@ class _CreatePostPageState extends State<CreatePostPage> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
-            child: _isLoading ? const Center(child: CircularProgressIndicator(color: Colors.white)) : TextButton(
+            child: _isLoading ? const Center(child: CircularProgressIndicator(color: Color.fromARGB(255, 132, 29, 29))) : TextButton(
               onPressed: _submitPost,
-              child: const Text('Share', style: TextStyle(color: Colors.white, fontSize: 16)),
+              child: const Text('Share', style: TextStyle(color: Colors.blue, fontSize: 16)),
             ),
           )
         ],

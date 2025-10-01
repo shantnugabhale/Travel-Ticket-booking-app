@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:trevel_booking_app/user/destination_detail_page.dart';
+import 'profile_page.dart';
 
 class ReviewsPage extends StatelessWidget {
   const ReviewsPage({super.key});

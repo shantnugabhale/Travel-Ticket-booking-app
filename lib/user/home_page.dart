@@ -11,6 +11,9 @@ import 'package:trevel_booking_app/user/community_page.dart';
 import 'package:trevel_booking_app/user/reviews_page.dart';
 import 'destination_detail_page.dart';
 import 'planner_page.dart';
+import 'map_page.dart';
+import 'profile_page.dart';
+import '../services/location_service.dart';
 
 class HomePage extends StatefulWidget {
   final int initialPageIndex;
@@ -84,23 +87,33 @@ class HomePageContent extends StatefulWidget {
 }
 
 class _HomePageContentState extends State<HomePageContent> {
-  final String _userLocation = "New York, USA";
   String _selectedCategory = 'All';
+  String _searchQuery = '';
 
   // Firebase instances
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final ImagePicker _picker = ImagePicker();
+  final TextEditingController _searchController = TextEditingController();
+  final LocationService _locationService = LocationService();
 
   String? _userImageUrl;
   String? _userEmail;
   String? _userName;
+  String _userLocation = 'Getting location...';
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _getCurrentLocation();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUserData() async {
@@ -117,6 +130,27 @@ class _HomePageContentState extends State<HomePageContent> {
         }
       } catch (e) {
         // Handle error, maybe show a snackbar
+      }
+    }
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      final position = await _locationService.getCurrentLocation();
+      if (position != null && mounted) {
+        setState(() {
+          _userLocation = _locationService.currentLocationName;
+        });
+      } else if (mounted) {
+        setState(() {
+          _userLocation = 'Location not available';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _userLocation = 'Location not available';
+        });
       }
     }
   }
@@ -171,78 +205,22 @@ class _HomePageContentState extends State<HomePageContent> {
     }
   }
 
-  void _showProfileDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 20.0,
-            horizontal: 10.0,
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircleAvatar(
-                radius: 40,
-                backgroundImage: (_userImageUrl != null && _userImageUrl!.isNotEmpty)
-                    ? NetworkImage(_userImageUrl!)
-                    : null,
-                child: (_userImageUrl == null || _userImageUrl!.isEmpty)
-                    ? const Icon(Icons.person, size: 36)
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _userName ?? 'User',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                _userEmail ?? 'No Email',
-                style: const TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-              const SizedBox(height: 10),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.photo_camera),
-                title: const Text('Change Picture'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _pickAndUploadImage();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.red),
-                title: const Text(
-                  'Logout',
-                  style: TextStyle(color: Colors.red),
-                ),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _logout();
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
-    Query destinationsQuery = _selectedCategory == 'All'
-        ? _firestore.collection('destinations')
-        : _firestore
-              .collection('destinations')
-              .where('category', isEqualTo: _selectedCategory);
+    Query destinationsQuery = _firestore.collection('destinations');
+    
+    // Apply category filter
+    if (_selectedCategory != 'All') {
+      destinationsQuery = destinationsQuery.where('category', isEqualTo: _selectedCategory);
+    }
+    
+    // Apply search filter if there's a search query
+    if (_searchQuery.isNotEmpty) {
+      destinationsQuery = destinationsQuery
+          .where('name', isGreaterThanOrEqualTo: _searchQuery)
+          .where('name', isLessThan: _searchQuery + 'z');
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -250,12 +228,27 @@ class _HomePageContentState extends State<HomePageContent> {
         centerTitle: false,
         actions: [
           IconButton(
+            icon: const Icon(Icons.my_location, size: 28),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const MapPage()),
+              );
+            },
+            tooltip: 'Live Location',
+          ),
+          IconButton(
             icon: const Icon(Icons.notifications_none, size: 28),
             onPressed: () {},
           ),
           const SizedBox(width: 8),
           GestureDetector(
-            onTap: _showProfileDialog,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfilePage()),
+              );
+            },
             child: CircleAvatar(
               radius: 18,
               backgroundImage: (_userImageUrl != null && _userImageUrl!.isNotEmpty)
@@ -309,6 +302,7 @@ class _HomePageContentState extends State<HomePageContent> {
                     ),
                     const SizedBox(height: 24),
                     TextField(
+                      controller: _searchController,
                       decoration: InputDecoration(
                         hintText: 'Search destinations...',
                         prefixIcon: const Icon(Icons.search),
@@ -320,12 +314,113 @@ class _HomePageContentState extends State<HomePageContent> {
                         fillColor: Colors.grey[200],
                         contentPadding: const EdgeInsets.symmetric(vertical: 0),
                       ),
+                      onChanged: (value) {
+                        setState(() {
+                          _searchQuery = value;
+                        });
+                      },
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
-              _buildCategoryFilter(),
+              
+              // Search Results Section
+              if (_searchQuery.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Search Results for "$_searchQuery"',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchQuery = '';
+                          });
+                        },
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: destinationsQuery.snapshots(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.data!.docs.isEmpty) {
+                        return const Center(
+                          heightFactor: 3,
+                          child: Column(
+                            children: [
+                              Icon(Icons.search_off, size: 48, color: Colors.grey),
+                              SizedBox(height: 8),
+                              Text('No destinations found matching your search.'),
+                            ],
+                          ),
+                        );
+                      }
+                      
+                      return AnimationLimiter(
+                        child: GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.7,
+                          ),
+                          itemCount: snapshot.data!.docs.length,
+                          itemBuilder: (context, index) {
+                            final destination = snapshot.data!.docs[index];
+                            final data = destination.data() as Map<String, dynamic>;
+                            return AnimationConfiguration.staggeredGrid(
+                              position: index,
+                              duration: const Duration(milliseconds: 375),
+                              columnCount: 2,
+                              child: ScaleAnimation(
+                                child: FadeInAnimation(
+                                  child: DestinationCard(
+                                    imageUrl: data['imageUrl'] ?? '',
+                                    name: data['name'] ?? '',
+                                    location: data['location'] ?? '',
+                                    rating: (data['rating'] ?? 4.5).toDouble(),
+                                    price: int.tryParse(data['price']?.toString().replaceAll(RegExp(r'[^\d]'), '') ?? '0') ?? 0,
+                                    currency: 'USD',
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => DestinationDetailPage(
+                                            destinationId: destination.id,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ] else ...[
+                _buildCategoryFilter(),
+              ],
               const SizedBox(height: 32),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16.0),

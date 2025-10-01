@@ -4,6 +4,7 @@ import 'package:trevel_booking_app/admin/manage_admins_page.dart';
 import 'package:trevel_booking_app/admin/manage_chat_rooms_page.dart';
 import 'package:trevel_booking_app/admin/manage_posts_page.dart';
 import 'package:trevel_booking_app/admin/manage_user_posts_page.dart';
+import 'package:trevel_booking_app/admin/post_report_page.dart';
 import 'package:trevel_booking_app/admin/upload_destination_page.dart';
 import 'package:trevel_booking_app/admin/view_bookings_page.dart';
 import 'admin_login.dart'; // Make sure to import your admin login page
@@ -65,6 +66,16 @@ class AdminHomePage extends StatelessWidget {
               },
             ),
             DashboardCard(
+            icon: Icons.report,
+            title: 'Post Reports',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PostReportPage()),
+              );
+            },
+          ),
+          DashboardCard(
               icon: Icons.local_activity,
               title: 'View Tickets',
               onTap: () {

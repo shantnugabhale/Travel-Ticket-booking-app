@@ -6,6 +6,7 @@ import 'chat_room_page.dart';
 import 'create_post_page.dart';
 // We are keeping this import in case you need the full page elsewhere.
 import 'comments_page.dart';
+import 'profile_page.dart';
 
 // This is the main stateful widget that will manage the page and fetch the current user
 class CommunityPage extends StatefulWidget {
@@ -61,10 +62,18 @@ class _CommunityPageState extends State<CommunityPage> {
             actions: [
               Padding(
                 padding: const EdgeInsets.only(right: 12.0),
-                child: CircleAvatar(
-                  radius: 18,
-                  backgroundImage: _currentUserImageUrl.isNotEmpty ? NetworkImage(_currentUserImageUrl) : null,
-                  child: _currentUserImageUrl.isEmpty ? const Icon(Icons.person, size: 18) : null,
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const ProfilePage()),
+                    );
+                  },
+                  child: CircleAvatar(
+                    radius: 18,
+                    backgroundImage: _currentUserImageUrl.isNotEmpty ? NetworkImage(_currentUserImageUrl) : null,
+                    child: _currentUserImageUrl.isEmpty ? const Icon(Icons.person, size: 18) : null,
+                  ),
                 ),
               ),
             ],
@@ -261,10 +270,29 @@ class _CommunityPostCardState extends State<CommunityPostCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ListTile(
-            leading: CircleAvatar(backgroundImage: NetworkImage(authorImageUrl)),
+            leading: CircleAvatar(backgroundImage: authorImageUrl.isNotEmpty ? NetworkImage(authorImageUrl) : null, child: authorImageUrl.isEmpty ? const Icon(Icons.person, size: 16) : null),
             title: Text(authorName, style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text(_formatDate((data['createdAt'] as Timestamp).toDate()), style: const TextStyle(color: Colors.grey)),
-            trailing: IconButton(icon: const Icon(Icons.more_horiz), onPressed: () {}),
+            trailing: PopupMenuButton<String>(
+              icon: const Icon(Icons.more_horiz),
+              onSelected: (value) async {
+                if (value == 'delete') {
+                  await FirebaseFirestore.instance.collection('community_posts').doc(widget.postDocument.id).delete();
+                } else if (value == 'report') {
+                  _showReportDialog(data);
+                }
+              },
+              itemBuilder: (context) {
+                final currentUid = FirebaseAuth.instance.currentUser?.uid;
+                final isOwner = currentUid != null && currentUid == (data['authorUid'] as String?);
+                return [
+                  if (isOwner)
+                    const PopupMenuItem<String>(value: 'delete', child: Text('Delete post')),
+                  if (!isOwner)
+                    const PopupMenuItem<String>(value: 'report', child: Text('Report post')),
+                ];
+              },
+            ),
           ),
           Image.network(
             postImageUrl,
@@ -342,6 +370,80 @@ class _CommunityPostCardState extends State<CommunityPostCard> {
     );
   }
 
+  void _showReportDialog(Map<String, dynamic> postData) {
+    String selectedReason = 'Inappropriate content';
+    final reasons = [
+      'Inappropriate content',
+      'Spam',
+      'Harassment',
+      'Violence',
+      'Hate speech',
+      'False information',
+      'Other'
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Report Post'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Please select a reason for reporting this post:'),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: selectedReason,
+                decoration: const InputDecoration(
+                  labelText: 'Reason',
+                  border: OutlineInputBorder(),
+                ),
+                items: reasons.map((reason) => DropdownMenuItem(
+                  value: reason,
+                  child: Text(reason),
+                )).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => selectedReason = value);
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final user = FirebaseAuth.instance.currentUser;
+                if (user == null) return;
+                
+                await FirebaseFirestore.instance.collection('post_reports').add({
+                  'postId': widget.postDocument.id,
+                  'reportedBy': user.uid,
+                  'authorUid': postData['authorUid'],
+                  'reason': selectedReason,
+                  'createdAt': Timestamp.now(),
+                  'status': 'open',
+                });
+                
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Report submitted'), backgroundColor: Colors.orange)
+                  );
+                }
+              },
+              child: const Text('Submit Report'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // Helper function for smart date/time formatting
   String _formatDate(DateTime date) {
     final now = DateTime.now();
@@ -414,12 +516,15 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
     final commentRef = postRef.collection('comments');
     final batch = FirebaseFirestore.instance.batch();
 
-    batch.set(commentRef.doc(), {
+    final commentDoc = commentRef.doc();
+    batch.set(commentDoc, {
       'commentText': commentText,
       'authorName': _currentUserName,
       'authorUid': _currentUserId,
       'authorImageUrl': _currentUserImageUrl,
       'timestamp': Timestamp.now(),
+      'likedBy': [],
+      'likeCount': 0,
     });
     batch.update(postRef, {'commentCount': FieldValue.increment(1)});
 
@@ -472,7 +577,13 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
                   itemCount: comments.length,
                   itemBuilder: (context, index) {
                     final data = comments[index].data() as Map<String, dynamic>;
-                    return CommentBubble(commentData: data);
+                    return CommentBubble(
+                      key: ValueKey(comments[index].id),
+                      commentData: data,
+                      commentId: comments[index].id,
+                      postId: widget.postId,
+                      currentUserId: _currentUserId,
+                    );
                   },
                 );
               },

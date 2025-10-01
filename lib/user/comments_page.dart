@@ -159,17 +159,89 @@ class _CommentsPageState extends State<CommentsPage> {
   }
 }
 
-class CommentBubble extends StatelessWidget {
+class CommentBubble extends StatefulWidget {
   final Map<String, dynamic> commentData;
+  final String? commentId;
+  final String? postId;
+  final String? currentUserId;
 
-  const CommentBubble({super.key, required this.commentData});
+  const CommentBubble({
+    super.key, 
+    required this.commentData,
+    this.commentId,
+    this.postId,
+    this.currentUserId,
+  });
+
+  @override
+  State<CommentBubble> createState() => _CommentBubbleState();
+}
+
+class _CommentBubbleState extends State<CommentBubble> {
+  late int _likeCount;
+  late bool _isLiked;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeState();
+  }
+
+  void _initializeState() {
+    final likedBy = widget.commentData['likedBy'] as List? ?? [];
+    _likeCount = widget.commentData['likeCount'] ?? 0;
+    _isLiked = widget.currentUserId != null && likedBy.contains(widget.currentUserId);
+  }
+
+  Future<void> _toggleLike() async {
+    if (widget.currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be logged in to like comments.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLiked = !_isLiked;
+      if (_isLiked) _likeCount++; else _likeCount--;
+    });
+
+    // Update the comment in Firestore
+    if (widget.commentId != null && widget.postId != null) {
+      try {
+        final commentRef = FirebaseFirestore.instance
+            .collection('community_posts')
+            .doc(widget.postId)
+            .collection('comments')
+            .doc(widget.commentId);
+
+        if (_isLiked) {
+          commentRef.update({
+            'likedBy': FieldValue.arrayUnion([widget.currentUserId]),
+            'likeCount': FieldValue.increment(1),
+          });
+        } else {
+          commentRef.update({
+            'likedBy': FieldValue.arrayRemove([widget.currentUserId]),
+            'likeCount': FieldValue.increment(-1),
+          });
+        }
+      } catch (e) {
+        // Revert the UI change if the backend update fails
+        setState(() {
+          _isLiked = !_isLiked;
+          if (_isLiked) _likeCount++; else _likeCount--;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final authorName = commentData['authorName'] ?? 'Anonymous';
-    final authorImageUrl = commentData['authorImageUrl'] ?? '';
-    final commentText = commentData['commentText'] ?? '';
-    final timestamp = (commentData['timestamp'] as Timestamp?)?.toDate();
+    final authorName = widget.commentData['authorName'] ?? 'Anonymous';
+    final authorImageUrl = widget.commentData['authorImageUrl'] ?? '';
+    final commentText = widget.commentData['commentText'] ?? '';
+    final timestamp = (widget.commentData['timestamp'] as Timestamp?)?.toDate();
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8.0),
@@ -218,14 +290,42 @@ class CommentBubble extends StatelessWidget {
                     style: const TextStyle(color: Colors.black87, fontSize: 15.0),
                   ),
                 ),
-                 if (timestamp != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 5.0, left: 5.0),
-                    child: Text(
-                      DateFormat('hh:mm a, d MMM').format(timestamp),
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                Row(
+                  children: [
+                    if (timestamp != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 5.0, left: 5.0),
+                        child: Text(
+                          DateFormat('hh:mm a, d MMM').format(timestamp),
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
+                      ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: _toggleLike,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _isLiked ? Icons.favorite : Icons.favorite_border,
+                            size: 16,
+                            color: _isLiked ? Colors.red : Colors.grey,
+                          ),
+                          if (_likeCount > 0) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '$_likeCount',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
+                ),
               ],
             ),
           ),

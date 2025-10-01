@@ -6,6 +6,10 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>NSPhotoLibraryUsageDescription</key>
   <string>This app needs access to your photo library to upload event images.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app needs your location while using the app.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>This app needs your location for live tracking.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Trevel Booking App</string>
 	<key>CFBundleExecutable</key>

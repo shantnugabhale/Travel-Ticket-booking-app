@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:trevel_booking_app/admin/create_subadmin_page.dart';
 import 'package:trevel_booking_app/admin/manage_posts_page.dart';
+import 'package:trevel_booking_app/admin/post_report_page.dart';
 import 'package:trevel_booking_app/admin/upload_destination_page.dart';
 import 'admin_login.dart'; // Make sure to import your admin login page
 
@@ -60,6 +61,13 @@ class SubadminHomePage extends StatelessWidget {
                 debugPrint('View Tickets tapped');
               },
             ),
+          DashboardCard(
+            icon: Icons.report,
+            title: 'Post Reports',
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const PostReportPage()));
+            },
+          ),
             
           ],
         ),
