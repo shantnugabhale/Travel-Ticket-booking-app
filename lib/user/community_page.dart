@@ -18,7 +18,7 @@ class CommunityPage extends StatefulWidget {
 class _CommunityPageState extends State<CommunityPage> {
   // State variables to hold the logged-in user's data
   String? _currentUserId;
-  String _currentUserImageUrl = 'https://via.placeholder.com/150';
+  String _currentUserImageUrl = '';
 
   @override
   void initState() {
@@ -34,7 +34,7 @@ class _CommunityPageState extends State<CommunityPage> {
       if (mounted && userDoc.exists) {
         setState(() {
           _currentUserId = user.uid;
-          _currentUserImageUrl = userDoc.data()?['imageUrl'] ?? 'https://via.placeholder.com/150';
+          _currentUserImageUrl = userDoc.data()?['imageUrl'] ?? '';
         });
       } else if (mounted) {
         // Fallback if user document doesn't exist yet
@@ -63,7 +63,8 @@ class _CommunityPageState extends State<CommunityPage> {
                 padding: const EdgeInsets.only(right: 12.0),
                 child: CircleAvatar(
                   radius: 18,
-                  backgroundImage: NetworkImage(_currentUserImageUrl),
+                  backgroundImage: _currentUserImageUrl.isNotEmpty ? NetworkImage(_currentUserImageUrl) : null,
+                  child: _currentUserImageUrl.isEmpty ? const Icon(Icons.person, size: 18) : null,
                 ),
               ),
             ],

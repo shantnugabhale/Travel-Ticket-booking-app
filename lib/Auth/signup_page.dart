@@ -1,9 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:trevel_booking_app/user/home_page.dart';
- // Navigate to home page on success
-import 'login_page.dart' hide HomePage; // Link to the login page
+import 'login_page.dart' hide HomePage;
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -39,7 +37,6 @@ class _SignUpPageState extends State<SignUpPage> {
     setState(() { _isLoading = true; });
 
     try {
-      // 1. Create user in Firebase Authentication
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -48,20 +45,28 @@ class _SignUpPageState extends State<SignUpPage> {
       User? newUser = userCredential.user;
 
       if (newUser != null) {
-        // 2. Save additional user info to Firestore
+        // Save additional user info to Firestore
         await _firestore.collection('users').doc(newUser.uid).set({
           'uid': newUser.uid,
           'name': _nameController.text.trim(),
           'email': newUser.email,
           'createdAt': Timestamp.now(),
         });
-        
-        // 3. Navigate to the HomePage
+
+        // Send email verification
+        await newUser.sendEmailVerification();
+
         if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Verification email sent. Please verify to login.'),
+              backgroundColor: Colors.green,
+            ),
+          );
           Navigator.pushAndRemoveUntil(
             context,
-            MaterialPageRoute(builder: (context) => const HomePage()),
-            (route) => false, // Remove all previous routes
+            MaterialPageRoute(builder: (context) => const LoginPage()),
+            (route) => false,
           );
         }
       }

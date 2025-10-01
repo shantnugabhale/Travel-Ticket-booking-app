@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:trevel_booking_app/admin/admin_login.dart'; // Import the admin login page
+import 'package:trevel_booking_app/admin/admin_login.dart';
 import 'package:trevel_booking_app/user/home_page.dart';
 import 'signup_page.dart';
+import 'forgot_password_page.dart';
+import 'google_auth_helper.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -30,10 +32,25 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      await _auth.signInWithEmailAndPassword(
+      final credential = await _auth.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
+
+      final user = credential.user;
+      if (user != null && !user.emailVerified) {
+        await user.sendEmailVerification();
+        await _auth.signOut();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Email not verified. Verification link sent.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
 
       if (mounted) {
         Navigator.pushAndRemoveUntil(
@@ -152,19 +169,67 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                 const SizedBox(height: 20),
 
+                // Google Sign-In Button
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    setState(() { _isLoading = true; });
+                    try {
+                      final cred = await GoogleAuthHelper.signInWithGoogle();
+                      final user = cred?.user;
+                      if (user != null) {
+                        if (mounted) {
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (context) => const HomePage()),
+                            (route) => false,
+                          );
+                        }
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Google sign-in failed: $e'), backgroundColor: Colors.red),
+                        );
+                      }
+                    } finally {
+                      if (mounted) setState(() { _isLoading = false; });
+                    }
+                  },
+                  icon: const Icon(Icons.g_mobiledata, size: 28, color: Colors.red),
+                  label: const Text('Continue with Google'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text("Don't have an account?"),
                     TextButton(
                       onPressed: () {
-                        Navigator.of(context).pushReplacement(
+                        Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (context) => const SignUpPage(),
+                            builder: (context) => const ForgotPasswordPage(),
                           ),
                         );
                       },
-                      child: const Text("Sign Up"),
+                      child: const Text("Forgot Password?"),
+                    ),
+                    Row(
+                      children: [
+                        const Text("Don't have an account?"),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (context) => const SignUpPage(),
+                              ),
+                            );
+                          },
+                          child: const Text("Sign Up"),
+                        ),
+                      ],
                     ),
                   ],
                 ),

@@ -13,7 +13,7 @@ class _TipsPageState extends State<TipsPage> {
   // State variables to hold the current user's data
   String? _currentUserId;
   String _currentUserName = 'Guest';
-  String _currentUserImageUrl = 'https://via.placeholder.com/150';
+  String _currentUserImageUrl = '';
 
   @override
   void initState() {
@@ -32,7 +32,7 @@ class _TipsPageState extends State<TipsPage> {
           _currentUserId = user.uid;
           _currentUserName = userDoc.data()?['name'] ?? 'No Name';
           // Assuming you might store an image URL in your user document
-          _currentUserImageUrl = userDoc.data()?['imageUrl'] ?? 'https://via.placeholder.com/150';
+          _currentUserImageUrl = userDoc.data()?['imageUrl'] ?? '';
         });
       }
     }
@@ -262,7 +262,12 @@ class _TipCardState extends State<TipCard> {
             const SizedBox(height: 16),
             Row(
               children: [
-                CircleAvatar(radius: 16, backgroundImage: NetworkImage(data['authorImageUrl'] ?? ''), backgroundColor: Colors.grey[200]),
+                CircleAvatar(
+                  radius: 16,
+                  backgroundImage: (data['authorImageUrl'] ?? '').toString().isNotEmpty ? NetworkImage(data['authorImageUrl']) : null,
+                  backgroundColor: Colors.grey[200],
+                  child: ((data['authorImageUrl'] ?? '').toString().isEmpty) ? const Icon(Icons.person, size: 14) : null,
+                ),
                 const SizedBox(width: 8),
                 Text(data['authorName'] ?? 'Anonymous', style: const TextStyle(fontWeight: FontWeight.w500)),
                 const Spacer(),

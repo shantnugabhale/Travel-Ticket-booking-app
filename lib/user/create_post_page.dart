@@ -60,7 +60,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
 
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       final userName = userDoc.data()?['name'] ?? 'Anonymous';
-      final userImageUrl = userDoc.data()?['imageUrl'] ?? 'https://via.placeholder.com/150';
+      final userImageUrl = userDoc.data()?['imageUrl'] ?? '';
 
       // 3. Determine the final postImageUrl. This variable is non-nullable.
       String postImageUrl; 

@@ -188,10 +188,12 @@ class _HomePageContentState extends State<HomePageContent> {
             children: [
               CircleAvatar(
                 radius: 40,
-                backgroundImage: _userImageUrl != null
+                backgroundImage: (_userImageUrl != null && _userImageUrl!.isNotEmpty)
                     ? NetworkImage(_userImageUrl!)
-                    : const NetworkImage('https://via.placeholder.com/150')
-                          as ImageProvider,
+                    : null,
+                child: (_userImageUrl == null || _userImageUrl!.isEmpty)
+                    ? const Icon(Icons.person, size: 36)
+                    : null,
               ),
               const SizedBox(height: 12),
               Text(
@@ -255,11 +257,13 @@ class _HomePageContentState extends State<HomePageContent> {
           GestureDetector(
             onTap: _showProfileDialog,
             child: CircleAvatar(
-              backgroundImage: _userImageUrl != null
-                  ? NetworkImage(_userImageUrl!)
-                  : const NetworkImage('https://via.placeholder.com/150')
-                        as ImageProvider,
               radius: 18,
+              backgroundImage: (_userImageUrl != null && _userImageUrl!.isNotEmpty)
+                  ? NetworkImage(_userImageUrl!)
+                  : null,
+              child: (_userImageUrl == null || _userImageUrl!.isEmpty)
+                  ? const Icon(Icons.person, size: 18)
+                  : null,
             ),
           ),
           const SizedBox(width: 16),
